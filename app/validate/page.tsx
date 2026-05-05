@@ -216,7 +216,7 @@ export default function ValidatePage() {
                       <td style={{ padding: "8px 10px" }}>
                         {r.blocked || r.issues.some((i) => i.severity === "warning") ? (
                           <Link
-                            href={`/library?focusId=${r.id}`}
+                            href={`/review?focusId=${r.id}${dbId ? `&dbId=${dbId}` : ""}`}
                             style={{
                               fontSize: 10, padding: "2px 7px", borderRadius: 4,
                               border: "0.5px solid var(--color-border-secondary)",
@@ -242,7 +242,7 @@ export default function ValidatePage() {
       {/* ── Footer hint ─────────────────────────────────────── */}
       {summary && summary.blocked > 0 && (
         <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 12 }}>
-          Export is blocked while {summary.blocked} record{summary.blocked === 1 ? "" : "s"} have hard errors. Use Fix → Library to resolve, then re-run validation.
+          Export is blocked while {summary.blocked} record{summary.blocked === 1 ? "" : "s"} have hard errors. Use Fix → Review to resolve, then re-run validation.
         </div>
       )}
     </div>
