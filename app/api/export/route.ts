@@ -112,13 +112,16 @@ export async function GET(req: NextRequest) {
   if (validateOnly || preview) {
     const results = adObjects.map(validateRow);
     const summary = summariseValidation(results);
-    const previewRows = results.slice(0, 10).map((r) => ({
+    // ?preview=1 → 10 rows for the export-page snippet.
+    // ?validate=1 → full row set so the Validate page can render every record.
+    const limit = preview && !validateOnly ? 10 : results.length;
+    const rows = results.slice(0, limit).map((r) => ({
       id: r.id,
       blocked: r.blocked,
       issues: r.issues,
       row: r.row,
     }));
-    return NextResponse.json({ summary, preview: previewRows });
+    return NextResponse.json({ summary, preview: rows });
   }
 
   // ── Filter to valid only if requested ─────────────────────
