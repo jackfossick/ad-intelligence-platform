@@ -1,0 +1,8 @@
+{
+  "startUrls": [
+    { "url": "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=US&q=weight+loss&search_type=keyword_unordered" },
+    { "url": "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=US&q=peptide&search_type=keyword_unordered" }
+  ],
+  "maxResults": 20,
+  "proxy": { "useApifyProxy": true }
+}

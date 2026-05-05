@@ -1,36 +1,130 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ad Intelligence — Internal Tool
 
-## Getting Started
+A local ad intelligence and creative replication system. Scrape, analyse, and replicate winning ads in the weight loss / looksmax / wellness space.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Setup (do this once)
+
+### 1. Install dependencies
+
+Open Terminal, navigate to this folder, and run:
+
+```
+cd /Users/jackfossick/Desktop/Ventures/Peptide/ad-intelligence
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set up your environment file
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy the example file and fill in your Apify token:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+cp .env.example .env
+```
 
-## Learn More
+Then open `.env` in any text editor and add your Apify token:
 
-To learn more about Next.js, take a look at the following resources:
+```
+APIFY_TOKEN=your_actual_token_here
+DATABASE_URL="file:./dev.db"
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Get your Apify token from: https://console.apify.com/account/integrations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Set up the database
 
-## Deploy on Vercel
+This only needs to be run once:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+npx prisma migrate dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Running the app
+
+```
+npm run dev
+```
+
+Then open your browser and go to: **http://localhost:3000**
+
+---
+
+## Uploading an existing CSV or Excel file
+
+1. Go to **Import / Export** in the sidebar
+2. Drag and drop your CSV or Excel file
+3. Review the column mapping (auto-matched where possible)
+4. Click **Import**
+
+---
+
+## Running an Apify scrape
+
+Make sure the app is running (`npm run dev`) first, then in a second terminal window:
+
+```
+npm run scrape -- --actor apify/facebook-ads-scraper --input scripts/inputs/facebook-example.json
+```
+
+Example actors to try:
+- `apify/facebook-ads-scraper` — Meta Ad Library
+- `clockworks/tiktok-scraper` — TikTok videos
+- `apify/instagram-scraper` — Instagram
+
+After scraping, normalize and import the data:
+
+```
+npm run normalize
+```
+
+---
+
+## Exporting the database
+
+Export everything to CSV (app must be running):
+
+```
+npm run export-csv
+```
+
+File is saved to `/data/exports/`. You can also export from the UI via **Import / Export → Export all ads to CSV**.
+
+---
+
+## Browsing the raw database
+
+To open a visual database browser:
+
+```
+npx prisma studio
+```
+
+Opens at http://localhost:5555
+
+---
+
+## Project structure
+
+```
+/app              — Next.js pages and API routes
+/components       — Shared UI components
+/scripts          — Terminal scripts (scrape, normalize, export)
+  /inputs         — Example input JSON files for Apify actors
+/data
+  /raw            — Raw Apify output (JSON)
+  /processed      — Normalized data ready to import
+  /exports        — CSV exports
+/prisma           — Database schema and migrations
+/lib              — Shared utilities
+```
+
+---
+
+## Security notes
+
+- Never share or commit your `.env` file (already in `.gitignore`)
+- Your Apify token is never logged or displayed
+- All data is stored locally — nothing sent to external servers

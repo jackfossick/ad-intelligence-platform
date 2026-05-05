@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Database {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  ads         Ad[]
+}
+
+model Ad {
+  id                     String    @id @default(uuid())
+  databaseId             String
+  database               Database  @relation(fields: [databaseId], references: [id])
+
+  externalId             String?
+  brand                  String?
+  primaryCategory        String?
+  subCategory            String?
+  niche                  String?
+  segment                String?
+  platform               String?
+  country                String?
+  organicOrPaid          String?
+  contentType            String?
+  urlType                String?
+  adLink                 String?
+  referenceUrl           String?
+  backupSearchUrl        String?
+  adLibraryUrl           String?
+  adSnapshotUrl          String?
+  advertiserPageUrl      String?
+  destinationUrl         String?
+  creativeVideoUrl       String?
+  creativeImageUrl       String?
+  urlReviewed            Boolean?
+
+  hookType               String?
+  hookExample            String?
+  first3Seconds          String?
+  formatType             String?
+  visualStyle            String?
+  personaTarget          String?
+  scriptStructure        String?
+  ctaType                String?
+  creativeAngle          String?
+  avatarOrCreativeType   String?
+  adCopy                 String?
+  headline               String?
+  description            String?
+  offer                  String?
+
+  performanceScore       Float?
+  hookScore              Float?
+  retentionScore         Float?
+  trustScore             Float?
+  conversionIntentScore  Float?
+  aiReplicabilityScore   Float?
+  nicheTransferScore     Float?
+  overallScore           Float?
+  performanceProxyScore  Float?
+
+  strategicPriority      Int?
+  views                  Int?
+  likes                  Int?
+  comments               Int?
+  shares                 Int?
+  impressions            Int?
+  spend                  Float?
+  currency               String?
+  engagementProxy        Float?
+
+  whyItWorks             String?
+  howToReplicate         String?
+  aiAvatarAdaptation     String?
+  valueForUs             String?
+  replicationInstruction String?
+  useCaseForUs           String?
+  complianceRisk         String?
+  strategicTag           String?
+  assetStatus            String?
+  funnelStage            String?
+  monetisationPath       String?
+  notes                  String?
+  reviewStatus           String?   @default("unreviewed")
+
+  sourceActor            String?
+  sourcePlatform         String?
+  scrapedAt              DateTime?
+  firstSeen              DateTime?
+  lastSeen               DateTime?
+
+  brandOrCreator         String?
+  referenceTitle         String?
+  referenceName          String?
+  sourceType             String?
+  priorityRank           Int?
+
+  extraFields            String?   // JSON string (SQLite doesn't support Json type)
+
+  // Collection-focused fields (added for v2 refactor)
+  thumbnailUrl           String?
+  painPoint              String?
+  whyUseful              String?
+  howAiShouldUseThis     String?
+  usefulnessScore        Float?
+
+  // Audience intelligence (new)
+  awarenessStage              String?
+  desire                      String?
+
+  // Creative strategy (new)
+  retentionStructure          String?
+  primaryEmotionalTrigger     String?
+  secondaryEmotionalTrigger   String?
+  proofType                   String?
+  proofMechanism              String?
+  viralityMechanic            String?
+  creativeBucket              String?
+
+  // Creative intelligence text (new)
+  whyItLikelyWorked           String?
+  whyItLikelyFailed           String?
+  mainCreativePattern         String?
+  winningHookPattern          String?
+  retentionDevice             String?
+  keyWeakness                 String?
+  bestReusableElement         String?
+  suggestedVariationsToTest   String?
+  recommendedNextCreativeTest String?
+
+  // Granular sub-scores (new, 0-10)
+  hookStrengthScore           Float?
+  audienceSpecificityScore    Float?
+  painClarityScore            Float?
+  desireIntensityScore        Float?
+  angleQualityScore           Float?
+  messageClarityScore         Float?
+  retentionQualityScore       Float?
+  emotionalIntensityScore     Float?
+  proofStrengthScore          Float?
+  platformNativeFitScore      Float?
+  shareabilityScore           Float?
+  commentPotentialScore       Float?
+  replicabilityScore          Float?
+  aiAvatarAdaptabilityScore   Float?
+  productionDifficultyScore   Float?
+  complianceRiskScore         Float?
+
+  // Computed composite scores (new)
+  organicViralPotential       Float?
+  paidAdPotential             Float?
+  aiReplicationValue          Float?
+  overallUsefulnessScore      Float?
+
+  // AI tagging metadata (new)
+  taggingStatus               String?   @default("untagged")
+  aiTaggedAt                  DateTime?
+  confidenceScore             Float?
+  confidenceReason            String?
+
+  // Usefulness classification (set by AI tagging)
+  usefulnessStatus            String?   // "useful" | "not_useful" | "uncertain"
+  usefulnessReason            String?
+  usefulnessConfidence        Float?    // 0-100
+  recommendedAction           String?   // "keep" | "review" | "delete_candidate"
+
+  // Ingestion tracking
+  ingestionSource             String?   // "apify" | "claude_chrome" | "csv" | "manual"
+  ingestionKeyword            String?   // search term used (Apify scrapes)
+  rawSourcePayload            String?   // lightweight JSON of original item
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model ScrapeRun {
+  id          String   @id @default(uuid())
+  actor       String
+  keyword     String?
+  platform    String?
+  status      String
+  rowCount    Int?
+  cost        Float?
+  rawDataPath String?
+  createdAt   DateTime @default(now())
+}
+
+model ImportJob {
+  id           String    @id @default(uuid())
+  source       String    // "apify" | "claude_chrome" | "csv" | "manual"
+  databaseId   String
+  databaseName String?
+  status       String    // "running" | "success" | "partial" | "failed"
+  totalRows    Int?
+  imported     Int?
+  skipped      Int?
+  failed       Int?
+  deduped      Int?
+  keyword      String?
+  actor        String?
+  errors       String?   // JSON array, max 10 entries
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+}

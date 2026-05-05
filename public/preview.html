@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ad Intelligence</title>
+<style>
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --mono: "SF Mono", "Fira Code", monospace;
+  --bg1:#FFFFFF; --bg2:#F7F8FA; --bg3:#F0F1F5;
+  --t1:#0F1117; --t2:#4E525E; --t3:#939AAA;
+  --b1:#C4C7CF; --b2:#D6D9E0; --b3:#E8EAEF;
+  --accent:#3B82F6; --accent-dk:#1D64D8; --accent-lt:#EEF4FF;
+  --green:#16A34A; --amber:#D97706; --red:#DC2626;
+  --r-sm:5px; --r-md:7px; --r-lg:11px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);font-size:14px;color:var(--t1);background:var(--bg3);-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
+
+/* Layout */
+.layout{display:flex;min-height:100vh}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg1);border-right:1px solid var(--b3);display:flex;flex-direction:column;z-index:100}
+.main{margin-left:220px;flex:1;padding:28px 32px;min-height:100vh}
+.page{display:none}
+.page.active{display:block}
+
+/* Sidebar */
+.sb-logo{padding:18px 18px 16px;border-bottom:1px solid var(--b3)}
+.sb-logo-inner{display:flex;align-items:center;gap:9px}
+.sb-mark{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#3B82F6 0%,#8B5CF6 100%);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(59,130,246,.30)}
+.sb-title{font-size:13px;font-weight:600;color:var(--t1)}
+.sb-sub{font-size:10px;color:var(--t3);margin-top:1px}
+.sb-nav{padding:12px 0;flex:1}
+.sb-item{display:flex;align-items:center;gap:9px;padding:7px 14px 7px 16px;margin:1px 8px;border-radius:var(--r-md);font-size:13px;color:var(--t2);cursor:pointer;transition:background .1s,color .1s;user-select:none}
+.sb-item:hover{background:var(--bg2)}
+.sb-item.active{background:var(--accent-lt);color:var(--accent-dk);font-weight:500}
+.sb-item .ico{font-size:13px;width:18px;text-align:center;flex-shrink:0;color:var(--t3)}
+.sb-item.active .ico{color:var(--accent)}
+.sb-group{font-size:9px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:var(--t3);padding:8px 18px 4px;margin-top:4px}
+.sb-footer{padding:12px 14px;border-top:1px solid var(--b3);background:var(--bg2)}
+.sb-footer-label{font-size:9px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.sb-db-select{width:100%;font-size:12px;padding:6px 8px;border-radius:var(--r-md);background:var(--bg1);border:1px solid var(--b2);color:var(--t1);font-weight:500;font-family:var(--font);margin-bottom:7px}
+.sb-db-btns{display:flex;gap:5px;flex-wrap:wrap}
+.sb-db-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid var(--b2);background:var(--bg1);color:var(--t2);cursor:pointer;font-family:var(--font)}
+.sb-db-btn:hover{background:var(--bg3)}
+.sb-db-btn.danger{border-color:#FECACA;color:var(--red)}
+.sb-db-btn.danger:hover{background:#FEF2F2}
+.sb-status-row{font-size:10px;color:var(--t3);margin-top:6px;display:flex;align-items:center;gap:4px}
+.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0}
+
+/* Page headers */
+.page-hd{margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.page-title{font-size:20px;font-weight:600;letter-spacing:-0.01em}
+.page-sub{font-size:13px;color:var(--t2);margin-top:3px}
+
+/* Cards */
+.card{background:var(--bg1);border:1px solid var(--b3);border-radius:var(--r-lg);padding:16px 18px}
+.card-title{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);margin-bottom:12px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--b2);background:var(--bg1);color:var(--t1);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);transition:background .1s;white-space:nowrap}
+.btn:hover{background:var(--bg2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-dk)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-danger{border-color:#FECACA;color:var(--red)}
+.btn-danger:hover{background:#FEF2F2}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--t2)}
+.btn-ghost:hover{background:var(--bg2)}
+.btn[disabled]{opacity:.4;cursor:not-allowed;pointer-events:none}
+
+/* Badges & chips */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap}
+.badge-blue{background:#DBEAFE;color:#1E40AF}
+.badge-green{background:#DCFCE7;color:#166534}
+.badge-amber{background:#FEF3C7;color:#92400E}
+.badge-red{background:#FEE2E2;color:#991B1B}
+.badge-gray{background:var(--bg3);color:var(--t2)}
+.badge-purple{background:#F3E8FF;color:#7E22CE}
+.chip{display:inline-block;padding:2px 7px;border-radius:4px;background:var(--bg3);border:1px solid var(--b3);font-size:11px;color:var(--t2)}
+
+/* Form elements */
+input,select,textarea{font-family:var(--font);font-size:13px;color:var(--t1);background:var(--bg1);border:1px solid var(--b2);border-radius:var(--r-md);padding:7px 10px;outline:none;transition:border-color .1s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(59,130,246,.10)}
+textarea{resize:vertical;width:100%}
+
+/* Table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+thead{background:var(--bg2)}
+th{padding:8px 10px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--b3);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--b3);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#F8FAFF;cursor:pointer}
+tbody tr.sel td{background:var(--accent-lt)}
+
+/* Thumb */
+.thumb{width:52px;height:36px;border-radius:4px;overflow:hidden;position:relative;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+
+/* Status tabs */
+.tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--b3);margin-bottom:14px}
+.tab{font-size:12px;padding:6px 12px;border:none;background:transparent;cursor:pointer;font-family:var(--font);color:var(--t2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{border-bottom-color:var(--accent);color:var(--accent);font-weight:600}
+.tab-n{font-size:10px;color:var(--t3);margin-left:3px}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.filter-sel{padding:5px 10px;border-radius:20px;font-size:12px;border:1px solid var(--b2);background:var(--bg1);color:var(--t2);font-family:var(--font);cursor:pointer}
+.filter-sel.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent-dk)}
+.search-wrap{position:relative;flex:1;min-width:160px;max-width:260px}
+.search-ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--t3);pointer-events:none}
+.search-inp{padding-left:28px;border-radius:20px;height:32px;font-size:12px}
+
+/* Score display */
+.score-val{font-size:13px;font-weight:600;font-family:var(--mono)}
+.score-pill{display:inline-flex;align-items:center;justify-content:center;min-width:36px;padding:3px 8px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--mono)}
+
+/* Bar chart */
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bar-label{width:160px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;text-transform:capitalize}
+.bar-track{flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:var(--accent);border-radius:3px}
+.bar-count{font-size:11px;color:var(--t3);width:24px;text-align:right;flex-shrink:0}
+
+/* Stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-card{padding:14px 16px;background:var(--bg1);border:1px solid var(--b3);border-radius:var(--r-lg)}
+.stat-num{font-size:24px;font-weight:600;letter-spacing:-0.02em}
+.stat-lbl{font-size:11px;color:var(--t3);margin-top:2px}
+
+/* Panel */
+.panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.15);z-index:200;backdrop-filter:blur(1px)}
+.panel{position:fixed;right:0;top:0;bottom:0;width:520px;background:var(--bg1);border-left:1px solid var(--b3);z-index:201;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.08);animation:slideIn .16s ease}
+@keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+.panel-head{padding:16px 20px;border-bottom:1px solid var(--b3);position:sticky;top:0;background:var(--bg1);z-index:10}
+.panel-body{padding:0;flex:1;overflow-y:auto}
+
+/* Panel sections */
+.psect{border-bottom:1px solid var(--b3)}
+.psect-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;cursor:pointer;user-select:none;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);background:var(--bg1)}
+.psect-hd:hover{background:var(--bg2)}
+.psect-body{padding:12px 20px 16px}
+
+/* Panel fields */
+.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.pf-full{grid-column:1/-1}
+.pf-row{display:flex;flex-direction:column;gap:4px}
+.pf-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)}
+.pf-input{font-size:12px;padding:6px 8px}
+.pf-select{font-size:12px;padding:6px 8px}
+.pf-textarea{font-size:12px;padding:6px 8px;min-height:64px}
+.pf-score{font-size:12px;padding:4px 8px;width:70px;text-align:center}
+.pf-score-row{display:flex;align-items:center;gap:10px}
+.pf-score-label{font-size:11px;color:var(--t2);flex:1}
+
+/* Computed scores */
+.cscore-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cscore-card{padding:12px 14px;border-radius:var(--r-md);background:var(--bg2);border:1px solid var(--b3);text-align:center}
+.cscore-val{font-size:22px;font-weight:700;font-family:var(--mono)}
+.cscore-lbl{font-size:10px;color:var(--t3);margin-top:2px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--bg1);border-radius:var(--r-lg);width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.20)}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--b3);display:flex;align-items:center;justify-content:space-between;font-size:15px;font-weight:600;flex-shrink:0}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.modal-body .pf-row{margin-bottom:12px}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--b3);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+
+/* Empty state */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;color:var(--t3)}
+.empty-state p{font-size:13px;margin-bottom:14px;color:var(--t2)}
+
+/* Code block */
+.code-block{background:#111318;border-radius:var(--r-md);padding:10px 14px;font-family:var(--mono);font-size:11px;color:#7EB8F7;line-height:1.7}
+
+/* Scrape simulation */
+.actor-btn{padding:6px 14px;border:1px solid var(--b2);border-radius:var(--r-md);background:var(--bg1);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.actor-btn.meta-act{border-color:#185FA5;background:#185FA510;color:#185FA5}
+.actor-btn.tiktok-act{border-color:#993C1D;background:#993C1D10;color:#993C1D}
+.actor-btn.ig-act{border-color:#534AB7;background:#534AB710;color:#534AB7}
+.status-running{background:#DBEAFE;color:#1E40AF;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.status-ok{background:#DCFCE7;color:#166534;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+
+/* Watch link */
+.watch-link{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--accent-dk);padding:3px 9px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-lt);text-decoration:none;white-space:nowrap}
+.watch-link.disabled{color:var(--t3);border-color:var(--b2);background:var(--bg2);pointer-events:none}
+
+/* Bucket badges */
+.bkt-copy{background:#DCFCE7;color:#166534;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
+.bkt-learn{background:#DBEAFE;color:#1E40AF;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
+.bkt-watch{background:#FEF3C7;color:#92400E;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
+.bkt-reject{background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
+
+/* Quick review btns */
+.qs-btn{font-size:10px;padding:2px 7px;border-radius:12px;border:1px solid;background:transparent;cursor:pointer;font-family:var(--font)}
+.qs-useful{border-color:var(--green);color:var(--green)}
+.qs-skip{border-color:var(--red);color:var(--red)}
+.qs-reset{border-color:var(--b2);color:var(--t3)}
+
+/* Summary box */
+.summary-box{margin-bottom:18px;padding:14px 18px;background:var(--bg2);border:1px solid var(--b3);border-radius:var(--r-lg);font-size:14px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-inner">
+      <div class="sb-mark">A</div>
+      <div><div class="sb-title">Ad Intelligence</div><div class="sb-sub">Collection system</div></div>
+    </div>
+  </div>
+  <div class="sb-nav">
+    <div class="sb-item active" id="nav-collect" onclick="showPage('collect')"><span class="ico">⊕</span>Collect</div>
+    <div class="sb-item" id="nav-library" onclick="showPage('library')"><span class="ico">⊞</span>Library</div>
+    <div class="sb-item" id="nav-insights" onclick="showPage('insights')"><span class="ico">◈</span>Key Insights</div>
+    <div class="sb-item" id="nav-export" onclick="showPage('export')"><span class="ico">↓</span>Export</div>
+    <div class="sb-group">System</div>
+    <div class="sb-item" id="nav-settings" onclick="showPage('settings')"><span class="ico">⚙</span>Settings</div>
+  </div>
+  <div class="sb-footer" id="sb-db-panel"><!-- rendered --></div>
+</nav>
+
+<!-- ═══════════════════════════════ MAIN ═══════════════════════════════ -->
+<main class="main">
+
+<!-- COLLECT -->
+<div class="page active" id="page-collect">
+  <div class="page-hd">
+    <div><div class="page-title">Collect</div><div class="page-sub">Scrape ads from Meta, TikTok, and Instagram via Apify — then save to your library.</div></div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Scrape settings</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="actor-btn meta-act" id="act-meta" onclick="selActor('meta')">Meta Ad Library</button>
+      <button class="actor-btn" id="act-tiktok" onclick="selActor('tiktok')">TikTok Creative Center</button>
+      <button class="actor-btn" id="act-ig" onclick="selActor('ig')">Instagram</button>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:14px" id="actor-desc">Scrapes Facebook / Instagram Ad Library. Requires keyword.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;margin-bottom:14px">
+      <div class="pf-row"><label class="pf-label">Keyword</label><input id="kw-in" placeholder="e.g. weight loss peptide" /></div>
+      <div class="pf-row"><label class="pf-label">Max results</label><input type="number" value="20" min="1" max="100" /></div>
+      <div class="pf-row"><label class="pf-label">Country</label><select><option>US</option><option>AU</option><option>GB</option><option>CA</option></select></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" onclick="doScrape()">Run scrape</button>
+      <span id="scrape-pill" style="display:none"></span>
+    </div>
+  </div>
+  <div id="scrape-results" style="display:none">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:500">58 results returned</span>
+      <select style="width:auto;font-size:12px;padding:5px 8px" id="scrape-db-sel"></select>
+      <button class="btn btn-primary btn-sm" onclick="saveScrapeResults()">Save all 58 to database</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table><thead><tr><th>#</th><th>platform</th><th>ownerUsername</th><th>caption</th><th>url</th></tr></thead><tbody>
+        <tr><td style="color:var(--t3)">1</td><td>Instagram</td><td>peptide.results</td><td>Transform your body in 12 weeks…</td><td style="color:var(--accent);font-size:11px">instagram.com/p/abc</td></tr>
+        <tr><td style="color:var(--t3)">2</td><td>Instagram</td><td>weightloss.ai</td><td>Stop doing cardio. Start this instead…</td><td style="color:var(--accent);font-size:11px">instagram.com/p/def</td></tr>
+        <tr><td style="color:var(--t3)">3</td><td>Instagram</td><td>looksmax.co</td><td>Your face structure can change…</td><td style="color:var(--accent);font-size:11px">instagram.com/p/ghi</td></tr>
+        <tr><td style="color:var(--t3)">4</td><td>Instagram</td><td>sema.protocol</td><td>Week 1 vs Week 12 results…</td><td style="color:var(--accent);font-size:11px">instagram.com/p/jkl</td></tr>
+        <tr><td style="color:var(--t3)">5</td><td>Instagram</td><td>peptide.health</td><td>Why your doctor won't tell you…</td><td style="color:var(--accent);font-size:11px">instagram.com/p/mno</td></tr>
+      </tbody></table>
+      <div style="padding:8px 14px;border-top:1px solid var(--b3);font-size:11px;color:var(--t3)">Showing 5 of 58. All 58 will be saved.</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <div class="card-title">Setup</div>
+    <p style="font-size:12px;color:var(--t2);margin-bottom:8px">Add to <code style="font-family:var(--mono);font-size:11px;background:var(--bg2);padding:1px 4px;border-radius:3px">.env</code>:</p>
+    <div class="code-block">APIFY_TOKEN=your_apify_token_here</div>
+  </div>
+</div>
+
+<!-- LIBRARY -->
+<div class="page" id="page-library">
+  <div class="page-hd">
+    <div><div class="page-title">Library</div><div class="page-sub" id="lib-sub"></div></div>
+    <button class="btn btn-primary btn-sm" onclick="openAddAdModal()">+ Add Ad</button>
+  </div>
+  <div class="tab-bar" id="lib-tabs"></div>
+  <div class="filter-bar" id="lib-filters"></div>
+  <div id="lib-body"></div>
+</div>
+
+<!-- KEY INSIGHTS -->
+<div class="page" id="page-insights">
+  <div class="page-hd"><div><div class="page-title">Key Insights</div><div class="page-sub" id="ins-sub"></div></div></div>
+  <div id="ins-body"></div>
+</div>
+
+<!-- EXPORT -->
+<div class="page" id="page-export">
+  <div class="page-hd"><div><div class="page-title">Export</div><div class="page-sub">Download your database for use in AI ad-generation systems.</div></div></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Active database</div>
+    <select style="max-width:360px" id="exp-db-sel" onchange="expDbChange(this.value)"></select>
+    <div style="font-size:12px;color:var(--t3);margin-top:7px" id="exp-db-count"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:26px">📄</div><div style="font-size:14px;font-weight:600">CSV</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.5;flex:1">Comma-separated. Compatible with Excel, Sheets, and most data tools.</div>
+      <button class="btn btn-primary btn-sm" style="align-self:flex-start" onclick="doExport('csv')">↓ Download CSV</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:26px">📊</div><div style="font-size:14px;font-weight:600">Excel (XLSX)</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.5;flex:1">Pre-formatted spreadsheet. Open directly in Excel or Numbers.</div>
+      <button class="btn btn-sm" style="align-self:flex-start;opacity:.5" disabled>↓ XLSX — coming soon</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:26px">{ }</div><div style="font-size:14px;font-weight:600">JSON</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.5;flex:1">Full structured data. Best for AI pipelines and downstream systems.</div>
+      <button class="btn btn-primary btn-sm" style="align-self:flex-start" onclick="doExport('json')">↓ Download JSON</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Export schema — optimised for AI ad-generation</div>
+    <div class="code-block" style="line-height:2">source_url · creative_video_url · caption_or_ad_copy · transcript · hook_text · hook_type · target_persona · pain_point · desire · creative_angle · creative_format · primary_emotional_trigger · proof_type · virality_mechanic · cta_type · organic_viral_potential · paid_ad_potential · ai_replication_value · overall_usefulness_score · confidence_score · confidence_reason · creative_bucket · tagging_status · ai_tagged_at · why_it_likely_worked · best_reusable_element · recommended_next_creative_test · notes</div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="page-hd"><div><div class="page-title">Settings</div><div class="page-sub">Environment and configuration.</div></div></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">API Keys</div>
+    <div class="code-block">APIFY_TOKEN=your_apify_token_here<br>OPENAI_API_KEY=your_openai_key_here<br>DATABASE_URL=file:./prisma/dev.db</div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Local Data</div>
+    <p style="font-size:12px;color:var(--t2);margin-bottom:10px">All data is saved to your browser's localStorage. Clear it to start fresh.</p>
+    <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑 Clear all data &amp; reset</button>
+  </div>
+</div>
+
+</main>
+
+<!-- ═══════════════════════════════ PANEL ═══════════════════════════════ -->
+<div id="panel-overlay" class="panel-overlay" style="display:none" onclick="closePanel()"></div>
+<div id="panel" class="panel" style="display:none">
+  <div class="panel-head" id="panel-head"></div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+
+<!-- ═══════════════════════════════ ADD AD MODAL ═══════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">Add Ad <button class="btn btn-ghost btn-sm" onclick="closeAddAdModal()" style="margin-left:auto">✕</button></div>
+    <div class="modal-body">
+      <div class="pf-row"><label class="pf-label">Source Platform *</label>
+        <select class="pf-select" id="add-platform">
+          <option value="">— select —</option>
+          <option>Instagram</option><option>TikTok</option><option>Meta / Facebook</option>
+          <option>YouTube</option><option>Twitter / X</option><option>Web</option><option>Other</option>
+        </select>
+      </div>
+      <div class="pf-row"><label class="pf-label">Source URL</label><input class="pf-input" id="add-url" placeholder="https://…" /></div>
+      <div class="pf-row"><label class="pf-label">Creative / Video URL</label><input class="pf-input" id="add-video" placeholder="Direct video link (optional)" /></div>
+      <div class="pf-row"><label class="pf-label">Brand or Creator</label><input class="pf-input" id="add-brand" placeholder="@handle or brand name" /></div>
+      <div class="pf-row"><label class="pf-label">Organic or Paid</label>
+        <select class="pf-select" id="add-organic"><option value="">— select —</option><option>organic</option><option>paid</option><option>unknown</option></select>
+      </div>
+      <div class="pf-row"><label class="pf-label">Caption / Ad Copy</label><textarea class="pf-textarea" id="add-copy" rows="3" placeholder="Paste the ad copy or caption…"></textarea></div>
+      <div class="pf-row"><label class="pf-label">Notes</label><textarea class="pf-textarea" id="add-notes" rows="2" placeholder="Any initial notes…"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeAddAdModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddAd()">Add Ad</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCRIPT ═══════════════════════════════ -->
+<script>
+// ── Escape helper ──────────────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function cap(s){return String(s||'').replace(/_/g,' ')}
+function uid(){return 'ad-'+Date.now()+'-'+Math.random().toString(36).slice(2,5)}
+
+// ── Demo ads ───────────────────────────────────────────────────────────
+const DEMO_ADS_INITIAL = [
+  { id:'demo-1', source_platform:'Instagram', source_url:'https://www.instagram.com/p/demo1', creative_video_url:'', thumbnail_url:'', brand_or_creator:'peptide.results', organic_or_paid:'organic', caption_or_ad_copy:'Week 1 vs Week 12 — real patient results on our peptide protocol. No surgery. No extreme diet. Just precision dosing and our AI-matched plan.', transcript:'', visible_text_on_screen:'WEEK 1 → WEEK 12', posted_date:'2026-04-15', scraped_at:'2026-05-01T22:00:00Z', hook_text:'Week 1 vs Week 12 — real patient results', hook_type:'transformation_claim', target_persona:'Women 30–50 wanting weight loss', awareness_stage:'problem_aware', pain_point:'Struggling with weight despite trying everything', desire:'Visible body transformation without extreme effort', creative_angle:'before_after', retention_structure:'Hook → Proof → CTA', creative_format:'before_after', primary_emotional_trigger:'desire', proof_type:'before_after', proof_mechanism:'Side-by-side photo comparison', cta_type:'link_in_bio', virality_mechanic:'transformation_reveal', hook_strength_score:8.5, audience_specificity_score:7, pain_clarity_score:8, desire_intensity_score:9, angle_quality_score:8.5, message_clarity_score:7.5, retention_quality_score:7, emotional_intensity_score:8, proof_strength_score:9, platform_native_fit_score:8, shareability_score:6.5, comment_potential_score:7, conversion_intent_score:7.5, replicability_score:9, ai_avatar_adaptability_score:8, production_difficulty_score:3, compliance_risk_score:2, organic_viral_potential:null, paid_ad_potential:null, ai_replication_value:null, overall_usefulness_score:null, confidence_score:8, confidence_reason:'Strong visual proof format with high emotional pull', why_it_likely_worked:'Visual before/after is the strongest trust signal for weight loss. Removes doubt instantly.', why_it_likely_failed:'', main_creative_pattern:'Time-stamped visual transformation', winning_hook_pattern:'Week X vs Week Y framing', retention_device:'Visual comparison drives scroll-stop', key_weakness:'May feel generic without specific mechanism mention', best_reusable_element:'Week X vs Week Y timestamp framing', suggested_variations_to_test:'Add specific peptide name, add doctor endorsement overlay', recommended_next_creative_test:'Same format with AI avatar narrating the transformation', creative_bucket:'copy_this', tagging_status:'manual_tagged', review_status:'useful', notes:'Strong template for AI avatar adaptation' },
+  { id:'demo-2', source_platform:'Instagram', source_url:'https://www.instagram.com/p/demo2', creative_video_url:'', thumbnail_url:'', brand_or_creator:'weightloss.ai', organic_or_paid:'organic', caption_or_ad_copy:'Stop doing cardio. Here\'s what actually burns fat at a hormonal level — most trainers won\'t tell you this because it puts them out of business.', transcript:'', visible_text_on_screen:'STOP DOING CARDIO', posted_date:'2026-04-20', scraped_at:'2026-05-01T22:01:00Z', hook_text:'Stop doing cardio', hook_type:'mistake_warning', target_persona:'Gym-goers not seeing results', awareness_stage:'solution_aware', pain_point:'Cardio not producing results', desire:'Efficient fat loss without wasted effort', creative_angle:'myth_busting', retention_structure:'Controversial claim → Education → Product reveal', creative_format:'talking_head', primary_emotional_trigger:'surprise', proof_type:'expert_authority', proof_mechanism:'Creator authority + scientific framing', cta_type:'save_this', virality_mechanic:'controversial_claim', hook_strength_score:9, audience_specificity_score:8, pain_clarity_score:8.5, desire_intensity_score:8, angle_quality_score:9, message_clarity_score:8, retention_quality_score:8.5, emotional_intensity_score:8, proof_strength_score:6, platform_native_fit_score:9, shareability_score:8.5, comment_potential_score:9, conversion_intent_score:6, replicability_score:8.5, ai_avatar_adaptability_score:9, production_difficulty_score:2, compliance_risk_score:3, organic_viral_potential:null, paid_ad_potential:null, ai_replication_value:null, overall_usefulness_score:null, confidence_score:9, confidence_reason:'Controversial hook with high debate bait potential', why_it_likely_worked:'Challenges a widely held belief. Creates identity threat and curiosity simultaneously.', why_it_likely_failed:'', main_creative_pattern:'Myth-busting expert authority', winning_hook_pattern:'Stop doing X (common belief)', retention_device:'Controversy keeps viewer watching to hear the argument', key_weakness:'Lower direct conversion intent', best_reusable_element:'Contrarian claim as hook', suggested_variations_to_test:'Test with peptide-specific claim: "Stop taking ozempic this way"', recommended_next_creative_test:'AI avatar version with clinical aesthetic', creative_bucket:'copy_this', tagging_status:'manual_tagged', review_status:'useful', notes:'Excellent debate bait template' },
+  { id:'demo-3', source_platform:'TikTok', source_url:'https://www.tiktok.com/@looksmax.co/video/demo3', creative_video_url:'', thumbnail_url:'', brand_or_creator:'looksmax.co', organic_or_paid:'organic', caption_or_ad_copy:'Your face structure can change in 90 days. No surgery required. Here\'s the protocol nobody talks about 👀', transcript:'', visible_text_on_screen:'', posted_date:'2026-04-25', scraped_at:'2026-05-01T22:02:00Z', hook_text:'Your face structure can change in 90 days', hook_type:'curiosity_gap', target_persona:'Men 18–30 interested in appearance', awareness_stage:'unaware', pain_point:'Unhappy with appearance, no clear path', desire:'Physical transformation without surgery', creative_angle:'educational_breakdown', retention_structure:'Claim → Proof → Steps → CTA', creative_format:'ugc_selfie', primary_emotional_trigger:'curiosity', proof_type:'before_after', proof_mechanism:'Creator\'s own transformation', cta_type:'follow_for_more', virality_mechanic:'surprising_fact', hook_strength_score:8, audience_specificity_score:8.5, pain_clarity_score:7, desire_intensity_score:8.5, angle_quality_score:7.5, message_clarity_score:7, retention_quality_score:8, emotional_intensity_score:7.5, proof_strength_score:7, platform_native_fit_score:9.5, shareability_score:8, comment_potential_score:8.5, conversion_intent_score:5, replicability_score:7, ai_avatar_adaptability_score:6, production_difficulty_score:2, compliance_risk_score:2, organic_viral_potential:null, paid_ad_potential:null, ai_replication_value:null, overall_usefulness_score:null, confidence_score:7, confidence_reason:'Strong UGC native format on TikTok', why_it_likely_worked:'Native UGC feel + curious hook + low friction ask (follow).', why_it_likely_failed:'', main_creative_pattern:'UGC authority + curiosity hook', winning_hook_pattern:'X can happen in Y days (surprising timeline)', retention_device:'Promise of secret protocol', key_weakness:'Low conversion intent — top of funnel only', best_reusable_element:'Timeline-based claim hook', suggested_variations_to_test:'Apply to weight/body composition angle', recommended_next_creative_test:'Peptide protocol version of this format', creative_bucket:'learn_from_this', tagging_status:'manual_tagged', review_status:'new', notes:'Good top-of-funnel format to adapt' },
+  { id:'demo-4', source_platform:'Instagram', source_url:'https://www.instagram.com/p/demo4', creative_video_url:'', thumbnail_url:'', brand_or_creator:'sema.protocol', organic_or_paid:'paid', caption_or_ad_copy:'87% of our users lost 8kg or more in 90 days without changing their diet. The difference? Peptide protocol personalised to your body type.', transcript:'', visible_text_on_screen:'87% LOST 8KG+', posted_date:'2026-04-10', scraped_at:'2026-05-01T22:03:00Z', hook_text:'87% of our users lost 8kg or more in 90 days', hook_type:'transformation_claim', target_persona:'Weight loss seekers who\'ve tried everything', awareness_stage:'most_aware', pain_point:'Failed diets, no sustainable results', desire:'Reliable proven system for fat loss', creative_angle:'social_proof', retention_structure:'Stat → Mechanism → Offer', creative_format:'text_overlay_only', primary_emotional_trigger:'trust', proof_type:'numbers_or_results', proof_mechanism:'Percentage stat + specific outcome', cta_type:'link_in_bio', virality_mechanic:'useful_information', hook_strength_score:8, audience_specificity_score:9, pain_clarity_score:8.5, desire_intensity_score:8, angle_quality_score:7.5, message_clarity_score:9, retention_quality_score:6, emotional_intensity_score:7, proof_strength_score:8.5, platform_native_fit_score:7, shareability_score:5, comment_potential_score:5, conversion_intent_score:9, replicability_score:9.5, ai_avatar_adaptability_score:9, production_difficulty_score:1, compliance_risk_score:4, organic_viral_potential:null, paid_ad_potential:null, ai_replication_value:null, overall_usefulness_score:null, confidence_score:8, confidence_reason:'High conversion intent, strong for paid', why_it_likely_worked:'Specific stat removes vagueness. "Without changing your diet" removes the biggest objection.', why_it_likely_failed:'', main_creative_pattern:'Social proof stat + objection removal', winning_hook_pattern:'X% of our users achieved Y in Z days', retention_device:'Objection removal ("without changing diet")', key_weakness:'Low virality, more of a paid ad format', best_reusable_element:'Specific percentage stat + objection elimination combo', suggested_variations_to_test:'Test different objection removals: "without exercise", "without counting calories"', recommended_next_creative_test:'Video version with testimonial backing up the stat', creative_bucket:'copy_this', tagging_status:'manual_tagged', review_status:'reviewed', notes:'Direct response template — high priority for paid campaigns' },
+  { id:'demo-5', source_platform:'Meta', source_url:'https://www.facebook.com/ads/library/?id=demo5', creative_video_url:'', thumbnail_url:'', brand_or_creator:'peptide.health', organic_or_paid:'paid', caption_or_ad_copy:'Why your doctor won\'t prescribe this weight loss method — and why that\'s about to change. The peptide protocol backed by 40 clinical trials.', transcript:'', visible_text_on_screen:'', posted_date:'2026-04-28', scraped_at:'2026-05-01T22:04:00Z', hook_text:'Why your doctor won\'t prescribe this weight loss method', hook_type:'secret_reveal', target_persona:'Health-conscious adults frustrated with medical system', awareness_stage:'problem_aware', pain_point:'Medical system failing them for weight loss', desire:'Access to cutting-edge effective treatments', creative_angle:'contrarian_take', retention_structure:'Mystery → Controversy → Credibility → Offer', creative_format:'talking_head', primary_emotional_trigger:'controversy', proof_type:'expert_authority', proof_mechanism:'Clinical trial reference', cta_type:'learn_more', virality_mechanic:'controversial_claim', hook_strength_score:9, audience_specificity_score:8, pain_clarity_score:9, desire_intensity_score:8.5, angle_quality_score:9, message_clarity_score:8, retention_quality_score:8, emotional_intensity_score:8.5, proof_strength_score:7, platform_native_fit_score:7.5, shareability_score:7, comment_potential_score:8.5, conversion_intent_score:7, replicability_score:8, ai_avatar_adaptability_score:8.5, production_difficulty_score:3, compliance_risk_score:6, organic_viral_potential:null, paid_ad_potential:null, ai_replication_value:null, overall_usefulness_score:null, confidence_score:7, confidence_reason:'Strong hook but compliance risk around medical claims', why_it_likely_worked:'Taps into systemic distrust of doctors while positioning product as insider knowledge.', why_it_likely_failed:'', main_creative_pattern:'Insider secret + authority challenge', winning_hook_pattern:'Why X won\'t tell you about Y', retention_device:'Conspiracy-adjacent framing drives completion', key_weakness:'High compliance risk — medical claim territory', best_reusable_element:'"Why [authority] won\'t tell you" frame', suggested_variations_to_test:'Soften compliance risk: "Why most doctors don\'t know about this yet"', recommended_next_creative_test:'Test with doctor as spokesperson to flip the frame', creative_bucket:'learn_from_this', tagging_status:'manual_tagged', review_status:'new', notes:'Watch compliance risk — but hook pattern is extremely reusable' }
+];
+
+// Recalc scores on initial demo ads
+DEMO_ADS_INITIAL.forEach(ad => recalcScores(ad));
+
+// ── Initial State ─────────────────────────────────────────────────────
+let state = {
+  databases: [
+    { id:'demo', name:'Demo Database', isDemo:true, ads: JSON.parse(JSON.stringify(DEMO_ADS_INITIAL)) },
+    { id:'real', name:'Real Database', isDemo:false, ads:[] }
+  ],
+  activeDatabaseId: 'real',
+  selectedAdId: null,
+  currentPage: 'collect',
+  libTab: '',
+  libSearch: '',
+  libPlatform: '',
+  libHook: '',
+  libBucket: '',
+  libHasVideo: '',
+  libTagging: '',
+  libPage: 1,
+  scrapeActor: 'meta'
+};
+
+// ── Persistence ────────────────────────────────────────────────────────
+function saveState(){try{localStorage.setItem('adIntel_v2',JSON.stringify(state))}catch(e){}}
+function loadState(){
+  try{
+    const s=localStorage.getItem('adIntel_v2');
+    if(s){const p=JSON.parse(s); Object.assign(state,p);}
+  }catch(e){}
+  // Validate activeDatabaseId
+  if(!state.databases.find(d=>d.id===state.activeDatabaseId)){
+    state.activeDatabaseId=state.databases[0]?.id||'real';
+  }
+}
+
+// ── Scoring ────────────────────────────────────────────────────────────
+function sc(v){return Math.min(10,Math.max(0,parseFloat(v)||0))}
+function r1(v){return Math.round(v*10)/10}
+function calcOrganic(ad){return r1(sc(ad.hook_strength_score)*0.20+sc(ad.platform_native_fit_score)*0.15+sc(ad.retention_quality_score)*0.15+sc(ad.emotional_intensity_score)*0.15+sc(ad.shareability_score)*0.15+sc(ad.comment_potential_score)*0.10)}
+function calcPaid(ad){return r1(sc(ad.hook_strength_score)*0.20+sc(ad.audience_specificity_score)*0.15+sc(ad.pain_clarity_score)*0.15+sc(ad.proof_strength_score)*0.15+sc(ad.message_clarity_score)*0.15+sc(ad.conversion_intent_score)*0.10)}
+function calcAiRep(ad){return r1(Math.max(0,sc(ad.replicability_score)*0.20+sc(ad.hook_strength_score)*0.15+sc(ad.angle_quality_score)*0.15+sc(ad.platform_native_fit_score)*0.15+sc(ad.emotional_intensity_score)*0.15+sc(ad.ai_avatar_adaptability_score)*0.10-sc(ad.production_difficulty_score)*0.10-sc(ad.compliance_risk_score)*0.10))}
+function calcUsefulness(ad){return r1(calcAiRep(ad)*0.40+calcOrganic(ad)*0.30+calcPaid(ad)*0.30)}
+function recalcScores(ad){ad.organic_viral_potential=calcOrganic(ad);ad.paid_ad_potential=calcPaid(ad);ad.ai_replication_value=calcAiRep(ad);ad.overall_usefulness_score=calcUsefulness(ad)}
+function scoreColor(v){if(v===null||v===''||v===undefined)return '#9CA3AF';const n=parseFloat(v);if(n>=7.5)return '#16A34A';if(n>=5)return '#2563EB';if(n>=3)return '#D97706';return '#DC2626'}
+
+// ── Getters ────────────────────────────────────────────────────────────
+function getActiveDb(){return state.databases.find(d=>d.id===state.activeDatabaseId)||state.databases[0]}
+function getActiveAds(){return getActiveDb()?.ads||[]}
+function getAdById(id){return getActiveAds().find(a=>a.id===id)}
+
+// ── Empty ad ───────────────────────────────────────────────────────────
+function createEmptyAd(){
+  return {id:uid(),source_platform:'',source_url:'',creative_video_url:'',thumbnail_url:'',brand_or_creator:'',organic_or_paid:'',caption_or_ad_copy:'',transcript:'',visible_text_on_screen:'',posted_date:'',scraped_at:new Date().toISOString(),hook_text:'',hook_type:'',target_persona:'',awareness_stage:'',pain_point:'',desire:'',creative_angle:'',retention_structure:'',creative_format:'',primary_emotional_trigger:'',proof_type:'',proof_mechanism:'',cta_type:'',virality_mechanic:'',hook_strength_score:'',audience_specificity_score:'',pain_clarity_score:'',desire_intensity_score:'',angle_quality_score:'',message_clarity_score:'',retention_quality_score:'',emotional_intensity_score:'',proof_strength_score:'',platform_native_fit_score:'',shareability_score:'',comment_potential_score:'',conversion_intent_score:'',replicability_score:'',ai_avatar_adaptability_score:'',production_difficulty_score:'',compliance_risk_score:'',organic_viral_potential:null,paid_ad_potential:null,ai_replication_value:null,overall_usefulness_score:null,confidence_score:'',confidence_reason:'',why_it_likely_worked:'',why_it_likely_failed:'',main_creative_pattern:'',winning_hook_pattern:'',retention_device:'',key_weakness:'',best_reusable_element:'',suggested_variations_to_test:'',recommended_next_creative_test:'',creative_bucket:'',tagging_status:'untagged',ai_tagged_at:'',review_status:'new',notes:''};
+}
+
+// ── Database CRUD ──────────────────────────────────────────────────────
+function switchDb(id){
+  state.activeDatabaseId=id;
+  state.selectedAdId=null;
+  state.libPage=1;
+  saveState();
+  renderSidebar();
+  renderCurrentPage();
+  closePanel();
+}
+function newDatabase(){
+  const name=prompt('Database name:','My Database');
+  if(!name||!name.trim())return;
+  const id='db-'+Date.now();
+  state.databases.push({id,name:name.trim(),isDemo:false,ads:[]});
+  state.activeDatabaseId=id;
+  saveState();
+  renderSidebar();
+  renderCurrentPage();
+}
+function deleteDatabase(id){
+  const db=state.databases.find(d=>d.id===id);
+  if(!db)return;
+  if(state.databases.length<=1){alert('Cannot delete the only database.');return;}
+  if(!confirm(`Delete "${db.name}" and all ${db.ads.length} ads? This cannot be undone.`))return;
+  state.databases=state.databases.filter(d=>d.id!==id);
+  if(state.activeDatabaseId===id)state.activeDatabaseId=state.databases[0].id;
+  saveState();
+  renderSidebar();
+  renderCurrentPage();
+  closePanel();
+}
+function resetDemo(){
+  if(!confirm('Reset Demo Database to its original 5 ads? All changes to demo ads will be lost.'))return;
+  const db=state.databases.find(d=>d.id==='demo');
+  if(db){db.ads=JSON.parse(JSON.stringify(DEMO_ADS_INITIAL));db.ads.forEach(a=>recalcScores(a));}
+  saveState();
+  renderSidebar();
+  renderCurrentPage();
+}
+
+// ── Add Ad ─────────────────────────────────────────────────────────────
+function openAddAdModal(){
+  document.getElementById('modal-overlay').style.display='flex';
+  ['add-platform','add-url','add-video','add-brand','add-organic','add-copy','add-notes'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){if(el.tagName==='SELECT')el.value='';else el.value='';}
+  });
+}
+function closeAddAdModal(){document.getElementById('modal-overlay').style.display='none'}
+function submitAddAd(){
+  const plat=document.getElementById('add-platform').value;
+  if(!plat){alert('Please select a platform.');return;}
+  const ad=createEmptyAd();
+  ad.source_platform=plat;
+  ad.source_url=document.getElementById('add-url').value.trim();
+  ad.creative_video_url=document.getElementById('add-video').value.trim();
+  ad.brand_or_creator=document.getElementById('add-brand').value.trim();
+  ad.organic_or_paid=document.getElementById('add-organic').value;
+  ad.caption_or_ad_copy=document.getElementById('add-copy').value.trim();
+  ad.notes=document.getElementById('add-notes').value.trim();
+  getActiveDb().ads.unshift(ad);
+  saveState();
+  closeAddAdModal();
+  renderLibrary();
+  renderSidebar();
+}
+function deleteAd(id){
+  if(!confirm('Delete this ad?'))return;
+  const db=getActiveDb();
+  db.ads=db.ads.filter(a=>a.id!==id);
+  saveState();
+  closePanel();
+  renderLibrary();
+  renderSidebar();
+}
+
+// ── Field change ───────────────────────────────────────────────────────
+function handleFieldChange(e){
+  const field=e.target.dataset.field;
+  if(!field||!state.selectedAdId)return;
+  const ad=getAdById(state.selectedAdId);
+  if(!ad)return;
+  ad[field]= e.target.type==='number'?(e.target.value===''?'':parseFloat(e.target.value)):e.target.value;
+  saveState();
+  updateLibraryRow(ad.id);
+  // update panel header badges
+  if(field==='review_status'||field==='tagging_status'||field==='creative_bucket'){
+    renderPanelHead(ad);
+  }
+  if(field==='review_status'){renderLibraryTabs();}
+}
+function updateAdStatus(adId,status){
+  const ad=getAdById(adId);
+  if(!ad)return;
+  ad.review_status=status;
+  saveState();
+  updateLibraryRow(adId);
+  renderLibraryTabs();
+  if(state.selectedAdId===adId)renderPanelHead(ad);
+}
+
+// ── Panel ──────────────────────────────────────────────────────────────
+function openPanel(adId){
+  state.selectedAdId=adId;
+  const ad=getAdById(adId);
+  if(!ad)return;
+  renderPanel(ad);
+  document.getElementById('panel-overlay').style.display='block';
+  document.getElementById('panel').style.display='flex';
+  // mark row selected
+  document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('sel'));
+  const row=document.querySelector(`tr[data-id="${adId}"]`);
+  if(row)row.classList.add('sel');
+}
+function closePanel(){
+  state.selectedAdId=null;
+  document.getElementById('panel-overlay').style.display='none';
+  document.getElementById('panel').style.display='none';
+  document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('sel'));
+}
+
+function renderPanelHead(ad){
+  const url=ad.source_url||ad.creative_video_url||'';
+  const watchBtn=url?`<a href="${esc(url)}" target="_blank" class="btn btn-sm" style="text-decoration:none">▶ Watch</a>`:'';
+  const ts=statusBadge(ad.tagging_status,'tag');
+  const rs=statusBadge(ad.review_status,'review');
+  document.getElementById('panel-head').innerHTML=`
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;color:var(--t3);font-family:var(--mono)">${esc(ad.id)}</div>
+      <div style="font-size:15px;font-weight:500;margin-top:4px;line-height:1.3">${esc(ad.brand_or_creator)||esc(ad.source_platform)||'Ad'}</div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;align-items:center">${rs}${ts}${watchBtn}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()" style="margin-left:10px;flex-shrink:0">✕</button>`;
+}
+
+function statusBadge(val,type){
+  if(!val)return'';
+  if(type==='review'){
+    const m={new:'badge-amber',reviewed:'badge-blue',useful:'badge-green',rejected:'badge-red'};
+    return `<span class="badge ${m[val]||'badge-gray'}">${esc(val)}</span>`;
+  }
+  if(type==='tag'){
+    const m={untagged:'badge-gray',manual_tagged:'badge-blue',ai_tagged:'badge-purple',human_reviewed:'badge-green'};
+    return `<span class="badge ${m[val]||'badge-gray'}">${esc(cap(val))}</span>`;
+  }
+  return'';
+}
+
+function selOpts(opts,val){return opts.map(o=>`<option value="${o}"${val===o?' selected':''}>${cap(o)}</option>`).join('')}
+
+function renderPanel(ad){
+  renderPanelHead(ad);
+
+  const HOOK_TYPES=['audience_callout','shock_statement','curiosity_gap','problem_callout','transformation_claim','controversial_take','myth_busting','question_hook','visual_surprise','pain_point_hook','status_trigger','secret_reveal','mistake_warning','before_after'];
+  const ANGLES=['problem_solution','before_after','testimonial','product_demo','founder_story','myth_busting','comparison','educational_breakdown','ugc_recommendation','objection_handling','trend_adaptation','lifestyle_aspiration','social_proof','contrarian_take','personal_confession','mistake_correction'];
+  const FORMATS=['talking_head','ugc_selfie','product_demo','screen_recording','skit','montage','before_after','unboxing','tutorial','reaction','customer_footage','meme_format','polished_brand_ad','ai_avatar','text_overlay_only','comment_reply'];
+  const EMOTIONS=['curiosity','surprise','relief','desire','humour','trust','urgency','identification','fomo','controversy','inspiration','validation','belonging','fear','status_anxiety','hope','envy','anger'];
+  const PROOFS=['before_after','testimonial','expert_authority','numbers_or_results','live_demo','reviews','comments_on_screen','side_by_side_comparison','product_in_use','founder_credibility','scientific_explanation','social_proof'];
+  const VIRALITY=['relatable_truth','useful_information','controversial_claim','identity_confirmation','debate_bait','aesthetic_satisfaction','surprising_fact','status_signal','humour','transformation_reveal','social_tagging','fear_or_warning'];
+  const BUCKETS=['copy_this','learn_from_this','watchlist','reject'];
+  const TAGGING=['untagged','manual_tagged','ai_tagged','human_reviewed'];
+  const REVIEWS=['new','reviewed','useful','rejected'];
+  const AWARENESS=['unaware','problem_aware','solution_aware','product_aware','most_aware'];
+  const PLATFORMS=['Instagram','TikTok','Meta / Facebook','YouTube','Twitter / X','Web','Other'];
+
+  function tf(label,field,val){return`<div class="pf-row"><label class="pf-label">${label}</label><input class="pf-input" type="text" data-field="${field}" value="${esc(val)}" oninput="handleFieldChange(event)"></div>`}
+  function sf(label,field,val,opts){return`<div class="pf-row"><label class="pf-label">${label}</label><select class="pf-select" data-field="${field}" onchange="handleFieldChange(event)"><option value="">—</option>${selOpts(opts,val)}</select></div>`}
+  function ta(label,field,val,rows=3){return`<div class="pf-row pf-full"><label class="pf-label">${label}</label><textarea class="pf-textarea" rows="${rows}" data-field="${field}" oninput="handleFieldChange(event)">${esc(val)}</textarea></div>`}
+  function nf(label,field,val){return`<div class="pf-row"><label class="pf-label">${label}</label><input class="pf-score" type="number" min="0" max="10" step="0.5" data-field="${field}" value="${esc(val)}" oninput="handleFieldChange(event)"></div>`}
+
+  function sect(title,html,open=true){
+    return`<div class="psect"><div class="psect-hd" onclick="toggleSect(this)"><span>${title}</span><span>${open?'▼':'▶'}</span></div><div class="psect-body" style="${open?'':'display:none'}">${html}</div></div>`;
+  }
+
+  const cvScore=(v,label)=>{
+    const c=scoreColor(v);
+    const disp=(v===null||v===''||v===undefined)?'—':v;
+    return`<div class="cscore-card"><div class="cscore-val" style="color:${c}">${disp}</div><div class="cscore-lbl">${label}</div></div>`;
+  };
+
+  let html='';
+
+  // 1. Review & Status
+  html+=sect('1 · Review & Status',`
+    <div class="pf-grid">
+      ${sf('Review Status','review_status',ad.review_status,REVIEWS)}
+      ${sf('Creative Bucket','creative_bucket',ad.creative_bucket,BUCKETS)}
+      ${sf('Tagging Status','tagging_status',ad.tagging_status,TAGGING)}
+    </div>
+    <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+      <button class="qs-btn qs-useful" onclick="updateAdStatus('${ad.id}','useful')">✓ Mark Useful</button>
+      <button class="qs-btn qs-skip" onclick="updateAdStatus('${ad.id}','rejected')">✗ Skip</button>
+      <button class="qs-btn qs-reset" onclick="updateAdStatus('${ad.id}','new')">↺ Reset</button>
+    </div>`);
+
+  // 2. Source
+  html+=sect('2 · Source',`<div class="pf-grid">
+    ${sf('Platform','source_platform',ad.source_platform,PLATFORMS)}
+    ${sf('Organic / Paid','organic_or_paid',ad.organic_or_paid,['organic','paid','unknown'])}
+    ${tf('Brand / Creator','brand_or_creator',ad.brand_or_creator)}
+    ${tf('Posted Date','posted_date',ad.posted_date)}
+    </div>
+    <div class="pf-grid" style="margin-top:10px">
+    ${tf('Source URL','source_url',ad.source_url)}
+    ${tf('Creative / Video URL','creative_video_url',ad.creative_video_url)}
+    </div>`);
+
+  // 3. Caption
+  html+=sect('3 · Caption / Ad Copy',`<div class="pf-grid">
+    ${ta('Caption or Ad Copy','caption_or_ad_copy',ad.caption_or_ad_copy,4)}
+    ${ta('Transcript','transcript',ad.transcript,3)}
+    ${tf('Visible Text on Screen','visible_text_on_screen',ad.visible_text_on_screen)}
+    </div>`);
+
+  // 4. Hook
+  html+=sect('4 · Hook',`<div class="pf-grid">
+    ${tf('Hook Text','hook_text',ad.hook_text)}
+    ${sf('Hook Type','hook_type',ad.hook_type,HOOK_TYPES)}
+    </div>`);
+
+  // 5. Audience
+  html+=sect('5 · Audience',`<div class="pf-grid">
+    ${tf('Target Persona','target_persona',ad.target_persona)}
+    ${sf('Awareness Stage','awareness_stage',ad.awareness_stage,AWARENESS)}
+    ${tf('Pain Point','pain_point',ad.pain_point)}
+    ${tf('Desire','desire',ad.desire)}
+    </div>`);
+
+  // 6. Creative Strategy
+  html+=sect('6 · Creative Strategy',`<div class="pf-grid">
+    ${sf('Creative Angle','creative_angle',ad.creative_angle,ANGLES)}
+    ${tf('CTA Type','cta_type',ad.cta_type)}
+    ${sf('Proof Type','proof_type',ad.proof_type,PROOFS)}
+    ${tf('Proof Mechanism','proof_mechanism',ad.proof_mechanism)}
+    </div>`);
+
+  // 7. Format & Retention
+  html+=sect('7 · Format & Retention',`<div class="pf-grid">
+    ${sf('Creative Format','creative_format',ad.creative_format,FORMATS)}
+    ${sf('Virality Mechanic','virality_mechanic',ad.virality_mechanic,VIRALITY)}
+    ${tf('Retention Structure','retention_structure',ad.retention_structure)}
+    </div>`);
+
+  // 8. Emotion
+  html+=sect('8 · Emotion & Trigger',`<div class="pf-grid">
+    ${sf('Primary Emotional Trigger','primary_emotional_trigger',ad.primary_emotional_trigger,EMOTIONS)}
+    </div>`);
+
+  // 9. Sub-scores
+  const scoreFields=[
+    ['Hook Strength','hook_strength_score'],['Audience Specificity','audience_specificity_score'],
+    ['Pain Clarity','pain_clarity_score'],['Desire Intensity','desire_intensity_score'],
+    ['Angle Quality','angle_quality_score'],['Message Clarity','message_clarity_score'],
+    ['Retention Quality','retention_quality_score'],['Emotional Intensity','emotional_intensity_score'],
+    ['Proof Strength','proof_strength_score'],['Platform Native Fit','platform_native_fit_score'],
+    ['Shareability','shareability_score'],['Comment Potential','comment_potential_score'],
+    ['Conversion Intent','conversion_intent_score'],['Replicability','replicability_score'],
+    ['AI Avatar Adaptability','ai_avatar_adaptability_score'],['Production Difficulty','production_difficulty_score'],
+    ['Compliance Risk','compliance_risk_score'],
+  ];
+  html+=sect('9 · Sub-scores (0–10)',`
+    <div class="pf-grid">${scoreFields.map(([l,f])=>nf(l,f,ad[f])).join('')}</div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="panelRecalc()">⟳ Recalculate composite scores</button>
+    </div>`,false);
+
+  // 10. Computed scores
+  html+=sect('10 · Computed Scores',`
+    <div class="cscore-grid" id="cscore-grid">
+      ${cvScore(ad.organic_viral_potential,'Organic Viral Potential')}
+      ${cvScore(ad.paid_ad_potential,'Paid Ad Potential')}
+      ${cvScore(ad.ai_replication_value,'AI Replication Value')}
+      ${cvScore(ad.overall_usefulness_score,'Overall Usefulness')}
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:8px">Edit sub-scores above, then click Recalculate.</div>`);
+
+  // 11. Intelligence
+  html+=sect('11 · Creative Intelligence',`<div class="pf-grid">
+    ${ta('Why it likely worked','why_it_likely_worked',ad.why_it_likely_worked)}
+    ${ta('Why it likely failed','why_it_likely_failed',ad.why_it_likely_failed)}
+    ${ta('Main creative pattern','main_creative_pattern',ad.main_creative_pattern,2)}
+    ${ta('Winning hook pattern','winning_hook_pattern',ad.winning_hook_pattern,2)}
+    ${ta('Key weakness','key_weakness',ad.key_weakness,2)}
+    ${ta('Best reusable element','best_reusable_element',ad.best_reusable_element,2)}
+    ${ta('Suggested variations to test','suggested_variations_to_test',ad.suggested_variations_to_test)}
+    ${ta('Recommended next creative test','recommended_next_creative_test',ad.recommended_next_creative_test,2)}
+    ${nf('Confidence Score (0–10)','confidence_score',ad.confidence_score)}
+    ${tf('Confidence Reason','confidence_reason',ad.confidence_reason)}
+    </div>`);
+
+  // 12. Notes
+  html+=sect('12 · Notes',`<div class="pf-grid">${ta('Notes','notes',ad.notes,4)}</div>`);
+
+  // AI tagging button
+  const _aiTagged=ad.tagging_status==='ai_tagged';
+  const _confHtml=_aiTagged
+    ?`<span style="color:var(--green);font-weight:600">✓ AI tagged</span>`
+      +(ad.confidence_score!==''&&ad.confidence_score!=null?` · Confidence: <strong>${ad.confidence_score}/10</strong>`:''  )
+      +(ad.confidence_reason?`<br><span style="color:var(--t2)">${esc(String(ad.confidence_reason))}</span>`:'')
+      +(ad.ai_tagged_at?`<br><span style="color:var(--t3);font-size:10px">Tagged: ${new Date(ad.ai_tagged_at).toLocaleString()}</span>`:'')
+    :'';
+  html+=`<div class="psect-body" style="border-top:1px solid var(--b3);padding:16px 20px;background:var(--bg2)">
+    <button class="btn btn-primary" id="ai-tag-btn" onclick="aiTagAd('${esc(ad.id)}')">✦ AI Tag This Ad</button>
+    <div id="ai-tag-status" style="font-size:11px;margin-top:8px;line-height:1.5">${_confHtml}</div>
+  </div>`;
+
+  // Delete
+  html+=`<div style="padding:16px 20px;border-top:1px solid var(--b3)">
+    <button class="btn btn-danger btn-sm" onclick="deleteAd('${esc(ad.id)}')">🗑 Delete this ad</button>
+  </div>`;
+
+  document.getElementById('panel-body').innerHTML=html;
+
+  // Bind field changes via event delegation
+  document.getElementById('panel-body').addEventListener('input',handleFieldChange);
+  document.getElementById('panel-body').addEventListener('change',handleFieldChange);
+}
+
+// ── AI Tagging ─────────────────────────────────────────────────────────────
+async function aiTagAd(adId){
+  const ad=getAdById(adId);
+  if(!ad)return;
+
+  // Guard: confirm before overwriting existing manual work
+  const hasExisting=(ad.tagging_status==='manual_tagged'||ad.tagging_status==='human_reviewed')
+    ||!!(ad.hook_text||ad.target_persona||ad.creative_angle||ad.why_it_likely_worked||ad.best_reusable_element);
+  if(hasExisting){
+    if(!confirm('This ad already has manual tags. Overwrite them with AI-generated tags?'))return;
+  }
+
+  // Evidence only — never send full state or all ads
+  const evidence={};
+  ['source_platform','source_url','creative_video_url','brand_or_creator','organic_or_paid',
+   'caption_or_ad_copy','transcript','visible_text_on_screen','posted_date',
+   'views','likes','comments','shares','saves'].forEach(f=>{evidence[f]=ad[f]??'';});
+
+  // Loading state
+  const btn=document.getElementById('ai-tag-btn');
+  const statusEl=document.getElementById('ai-tag-status');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Tagging…';}
+  if(statusEl){statusEl.innerHTML='<span style="color:var(--t3)">Sending to AI…</span>';}
+
+  try{
+    const res=await fetch('/api/tag-ad',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(evidence)
+    });
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
+
+    const r=data.result;
+    if(!r||typeof r!=='object')throw new Error('Invalid response structure from AI');
+
+    // Apply text / categorical fields
+    const TEXT_FIELDS=[
+      'hook_text','hook_type','target_persona','awareness_stage','pain_point','desire',
+      'creative_angle','retention_structure','creative_format','primary_emotional_trigger',
+      'secondary_emotional_trigger','proof_type','proof_mechanism','cta_type','virality_mechanic',
+      'why_it_likely_worked','why_it_likely_failed','main_creative_pattern','winning_hook_pattern',
+      'retention_device','key_weakness','best_reusable_element','suggested_variations_to_test',
+      'recommended_next_creative_test','creative_bucket','confidence_reason'
+    ];
+    TEXT_FIELDS.forEach(f=>{if(r[f]!==undefined&&r[f]!==null)ad[f]=String(r[f]);});
+
+    // Apply + clamp score fields to 0–10
+    const SCORE_FIELDS=[
+      'hook_strength_score','audience_specificity_score','pain_clarity_score',
+      'desire_intensity_score','angle_quality_score','message_clarity_score',
+      'retention_quality_score','emotional_intensity_score','proof_strength_score',
+      'platform_native_fit_score','shareability_score','comment_potential_score',
+      'conversion_intent_score','replicability_score','ai_avatar_adaptability_score',
+      'production_difficulty_score','compliance_risk_score','confidence_score'
+    ];
+    SCORE_FIELDS.forEach(f=>{
+      if(r[f]!==undefined&&r[f]!==null&&r[f]!==''){
+        const v=parseFloat(r[f]);
+        if(!isNaN(v))ad[f]=Math.min(10,Math.max(0,v));
+      }
+    });
+
+    ad.tagging_status='ai_tagged';
+    ad.ai_tagged_at=new Date().toISOString();
+
+    recalcScores(ad);
+    saveState();
+    renderPanel(ad);        // re-renders everything including confidence block
+    updateLibraryRow(ad.id);
+
+  }catch(err){
+    // Restore button, show error — don't re-render whole panel
+    const btn2=document.getElementById('ai-tag-btn');
+    const st2=document.getElementById('ai-tag-status');
+    if(btn2){btn2.disabled=false;btn2.textContent='✦ AI Tag This Ad';}
+    if(st2){st2.innerHTML=`<span style="color:var(--red)">✗ Tagging failed: ${esc(err.message||'Unknown error')}</span>`;}
+  }
+}
+
+function panelRecalc(){
+  const ad=getAdById(state.selectedAdId);
+  if(!ad)return;
+  recalcScores(ad);
+  saveState();
+  // Re-render computed scores block
+  document.getElementById('cscore-grid').innerHTML=`
+    ${cscoreCard(ad.organic_viral_potential,'Organic Viral Potential')}
+    ${cscoreCard(ad.paid_ad_potential,'Paid Ad Potential')}
+    ${cscoreCard(ad.ai_replication_value,'AI Replication Value')}
+    ${cscoreCard(ad.overall_usefulness_score,'Overall Usefulness')}`;
+  updateLibraryRow(ad.id);
+}
+
+function cscoreCard(v,label){
+  const c=scoreColor(v);
+  const disp=(v===null||v===''||v===undefined)?'—':v;
+  return`<div class="cscore-card"><div class="cscore-val" style="color:${c}">${disp}</div><div class="cscore-lbl">${label}</div></div>`;
+}
+
+function toggleSect(hd){
+  const body=hd.nextElementSibling;
+  const arrow=hd.querySelector('span:last-child');
+  const hidden=body.style.display==='none';
+  body.style.display=hidden?'':'none';
+  if(arrow)arrow.textContent=hidden?'▼':'▶';
+}
+
+// ── Library ────────────────────────────────────────────────────────────
+const PAGE_SIZE=20;
+
+function renderLibrary(){
+  const db=getActiveDb();
+  const ads=db.ads;
+  document.getElementById('lib-sub').textContent=`${db.name} · ${ads.length} ads collected`;
+  renderLibraryTabs();
+  renderLibraryFilters();
+  renderLibraryTable();
+}
+
+function getFilteredAds(){
+  const ads=getActiveAds();
+  const tab=state.libTab;
+  const q=(state.libSearch||'').toLowerCase().trim();
+  return ads.filter(a=>{
+    if(tab){
+      const rs=(a.review_status||'new').toLowerCase();
+      if(tab==='useful'&&rs!=='useful')return false;
+      if(tab==='new'&&rs!=='new'&&rs!=='unreviewed')return false;
+      if(tab==='reviewed'&&rs!=='reviewed')return false;
+      if(tab==='rejected'&&rs!=='rejected')return false;
+    }
+    if(q){
+      const hay=[a.source_platform,a.brand_or_creator,a.hook_type,a.creative_angle,a.creative_format,a.primary_emotional_trigger,a.caption_or_ad_copy,a.notes,a.hook_text,a.creative_bucket].map(String).join(' ').toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    if(state.libPlatform&&a.source_platform!==state.libPlatform)return false;
+    if(state.libHook&&a.hook_type!==state.libHook)return false;
+    if(state.libBucket&&a.creative_bucket!==state.libBucket)return false;
+    if(state.libHasVideo==='yes'&&!a.source_url&&!a.creative_video_url)return false;
+    if(state.libHasVideo==='no'&&(a.source_url||a.creative_video_url))return false;
+    if(state.libTagging&&(a.tagging_status||'untagged')!==state.libTagging)return false;
+    return true;
+  });
+}
+
+function renderLibraryTabs(){
+  const ads=getActiveAds();
+  const counts={all:ads.length,new:0,useful:0,reviewed:0,rejected:0};
+  ads.forEach(a=>{
+    const rs=(a.review_status||'new').toLowerCase();
+    if(rs==='new'||rs==='unreviewed')counts.new++;
+    else if(rs in counts)counts[rs]++;
+  });
+  const tabs=[{k:'',l:'All',c:counts.all},{k:'new',l:'New',c:counts.new},{k:'useful',l:'✓ Useful',c:counts.useful},{k:'reviewed',l:'Reviewed',c:counts.reviewed},{k:'rejected',l:'✗ Skipped',c:counts.rejected}];
+  document.getElementById('lib-tabs').innerHTML=tabs.map(t=>`<button class="tab${state.libTab===t.k?' active':''}" onclick="setLibTab('${t.k}')">${t.l}<span class="tab-n">${t.c}</span></button>`).join('');
+}
+
+function setLibTab(k){state.libTab=k;state.libPage=1;renderLibraryTabs();renderLibraryTable();}
+
+function renderLibraryFilters(){
+  const ads=getActiveAds();
+  const plats=[...new Set(ads.map(a=>a.source_platform).filter(Boolean))].sort();
+  const hooks=[...new Set(ads.map(a=>a.hook_type).filter(Boolean))].sort();
+  const buckets=[...new Set(ads.map(a=>a.creative_bucket).filter(Boolean))].sort();
+  document.getElementById('lib-filters').innerHTML=`
+    <div class="search-wrap"><span class="search-ico">⌕</span><input class="search-inp" placeholder="Search copy, hooks, brand…" value="${esc(state.libSearch)}" oninput="libSearch(this.value)"></div>
+    <select class="filter-sel${state.libPlatform?' active':''}" onchange="libFilter('libPlatform',this.value)"><option value="">All platforms</option>${plats.map(p=>`<option${state.libPlatform===p?' selected':''}>${p}</option>`).join('')}</select>
+    <select class="filter-sel${state.libHook?' active':''}" onchange="libFilter('libHook',this.value)"><option value="">All hooks</option>${hooks.map(h=>`<option value="${h}"${state.libHook===h?' selected':''}>${cap(h)}</option>`).join('')}</select>
+    <select class="filter-sel${state.libBucket?' active':''}" onchange="libFilter('libBucket',this.value)"><option value="">All buckets</option>${buckets.map(b=>`<option value="${b}"${state.libBucket===b?' selected':''}>${cap(b)}</option>`).join('')}</select>
+    <select class="filter-sel${state.libHasVideo?' active':''}" onchange="libFilter('libHasVideo',this.value)"><option value="">Has link</option><option value="yes"${state.libHasVideo==='yes'?' selected':''}>yes</option><option value="no"${state.libHasVideo==='no'?' selected':''}>no</option></select>
+    <select class="filter-sel${state.libTagging?' active':''}" onchange="libFilter('libTagging',this.value)"><option value="">All tagging</option><option value="untagged"${state.libTagging==='untagged'?' selected':''}>Untagged</option><option value="manual_tagged"${state.libTagging==='manual_tagged'?' selected':''}>Manual tagged</option><option value="ai_tagged"${state.libTagging==='ai_tagged'?' selected':''}>AI tagged</option><option value="human_reviewed"${state.libTagging==='human_reviewed'?' selected':''}>Human reviewed</option></select>
+    ${(state.libSearch||state.libPlatform||state.libHook||state.libBucket||state.libHasVideo||state.libTagging)?'<button class="btn btn-ghost btn-sm" onclick="clearLibFilters()">✕ Clear</button>':''}
+    <span style="margin-left:auto;font-size:12px;color:var(--t3)">${getFilteredAds().length} of ${getActiveAds().length}</span>`;
+}
+
+function libSearch(v){state.libSearch=v;state.libPage=1;renderLibraryFilters();renderLibraryTable();}
+function libFilter(k,v){state[k]=v;state.libPage=1;renderLibraryFilters();renderLibraryTable();}
+function clearLibFilters(){state.libSearch='';state.libPlatform='';state.libHook='';state.libBucket='';state.libHasVideo='';state.libTagging='';state.libPage=1;renderLibraryFilters();renderLibraryTable();}
+
+function platColor(p){const m={Instagram:'#E1306C',TikTok:'#000000','Meta / Facebook':'#1877F2',YouTube:'#FF0000','Twitter / X':'#1DA1F2',Meta:'#1877F2'};return m[p]||'#6B7280'}
+function bucketBadge(b){if(!b)return'—';const m={copy_this:'bkt-copy',learn_from_this:'bkt-learn',watchlist:'bkt-watch',reject:'bkt-reject'};return`<span class="${m[b]||'badge-gray'}">${cap(b)}</span>`}
+function scoreDisp(v){if(v===null||v===''||v===undefined)return'<span style="color:var(--t3)">—</span>';const c=scoreColor(v);return`<span class="score-val" style="color:${c}">${v}</span>`}
+
+function renderLibraryTable(){
+  const filtered=getFilteredAds();
+  const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
+  if(state.libPage>totalPages)state.libPage=1;
+  const paged=filtered.slice((state.libPage-1)*PAGE_SIZE,state.libPage*PAGE_SIZE);
+
+  let html='';
+  if(getActiveAds().length===0){
+    html=`<div class="empty-state"><p>No ads collected yet.<br>Add an ad manually or collect/import ads to begin.</p><button class="btn btn-primary btn-sm" onclick="openAddAdModal()">+ Add Ad</button></div>`;
+  } else if(filtered.length===0){
+    html=`<div class="empty-state"><p>No ads match your filters.</p><button class="btn btn-sm" onclick="clearLibFilters()">Clear filters</button></div>`;
+  } else {
+    const rows=paged.map((ad,i)=>{
+      const n=(state.libPage-1)*PAGE_SIZE+i+1;
+      const pc=platColor(ad.source_platform);
+      const url=ad.source_url||ad.creative_video_url||'';
+      const watch=url?`<a href="${esc(url)}" target="_blank" class="watch-link" onclick="event.stopPropagation()">▶ Watch</a>`:`<span class="watch-link disabled">▶ Watch</span>`;
+      const isDemo=state.activeDatabaseId==='demo';
+      return`<tr data-id="${esc(ad.id)}" onclick="openPanel('${esc(ad.id)}')">
+        <td style="color:var(--t3);font-size:10px;font-family:var(--mono)">${n}</td>
+        <td><div class="thumb" style="background:${pc}22;color:${pc}">${esc(ad.source_platform||'?').slice(0,1)}</div></td>
+        <td><span class="badge badge-blue" style="font-size:10px">${esc(ad.source_platform||'—')}</span></td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(ad.brand_or_creator||'—')}</td>
+        <td>${ad.hook_type?`<span class="chip" style="font-size:10px">${cap(ad.hook_type)}</span>`:'<span style="color:var(--t3)">—</span>'}</td>
+        <td style="font-size:11px;color:var(--t2)">${cap(ad.creative_angle)||'—'}</td>
+        <td style="font-size:11px;color:var(--t2)">${cap(ad.creative_format)||'—'}</td>
+        <td style="font-size:11px;color:var(--t2)">${cap(ad.primary_emotional_trigger)||'—'}</td>
+        <td>${scoreDisp(ad.ai_replication_value)}</td>
+        <td>${scoreDisp(ad.overall_usefulness_score)}</td>
+        <td>${bucketBadge(ad.creative_bucket)}</td>
+        <td>${watch}</td>
+      </tr>`;
+    }).join('');
+    html=`<div class="card" style="padding:0;overflow:hidden">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:32px">#</th><th style="width:56px">Prev</th><th>Platform</th>
+            <th>Brand/Creator</th><th>Hook Type</th><th>Creative Angle</th>
+            <th>Format</th><th>Emotion</th><th>AI Rep</th><th>Usefulness</th>
+            <th>Bucket</th><th>Watch</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    if(totalPages>1){
+      html+=`<div style="display:flex;align-items:center;gap:6px;padding:9px 16px;border-top:1px solid var(--b3);background:var(--bg2)">
+        <span style="font-size:11px;color:var(--t3);margin-right:auto">${(state.libPage-1)*PAGE_SIZE+1}–${Math.min(state.libPage*PAGE_SIZE,filtered.length)} of ${filtered.length}</span>
+        <button class="btn btn-sm" onclick="setLibPage(${state.libPage-1})" ${state.libPage===1?'disabled':''}>‹</button>`;
+      for(let p=1;p<=totalPages;p++){
+        if(totalPages>7&&p>2&&p<totalPages-1&&Math.abs(p-state.libPage)>1){if(p===3||p===totalPages-2)html+=`<span style="color:var(--t3)">…</span>`;continue;}
+        html+=`<button class="btn btn-sm${p===state.libPage?' btn-primary':''}" onclick="setLibPage(${p})">${p}</button>`;
+      }
+      html+=`<button class="btn btn-sm" onclick="setLibPage(${state.libPage+1})" ${state.libPage===totalPages?'disabled':''}>›</button></div>`;
+    }
+    html+=`</div>`;
+  }
+  document.getElementById('lib-body').innerHTML=html;
+  // re-mark selected row
+  if(state.selectedAdId){
+    const row=document.querySelector(`tr[data-id="${state.selectedAdId}"]`);
+    if(row)row.classList.add('sel');
+  }
+}
+
+function setLibPage(p){state.libPage=p;renderLibraryTable();}
+
+function updateLibraryRow(id){
+  const ad=getAdById(id);
+  if(!ad)return;
+  const row=document.querySelector(`tr[data-id="${id}"]`);
+  if(!row)return;
+  // just re-render the whole table (fast enough for this size)
+  renderLibraryTable();
+}
+
+// ── Insights ───────────────────────────────────────────────────────────
+function renderInsights(){
+  const db=getActiveDb();
+  const ads=db.ads;
+  document.getElementById('ins-sub').textContent=`${db.name} · ${ads.length} ads`;
+
+  if(ads.length===0){
+    document.getElementById('ins-body').innerHTML=`<div class="empty-state"><p>Not enough tagged data yet.<br>Add or import ads first.</p><button class="btn btn-primary btn-sm" onclick="showPage('library')">Go to Library</button></div>`;
+    return;
+  }
+
+  const tagged=ads.filter(a=>a.tagging_status!=='untagged');
+  const useful=ads.filter(a=>a.review_status==='useful');
+  const unreviewed=ads.filter(a=>a.review_status==='new'||a.review_status==='unreviewed');
+
+  function countBy(field){
+    const c={};
+    ads.forEach(a=>{if(a[field])c[a[field]]=(c[a[field]]||0)+1});
+    return Object.entries(c).map(([l,n])=>({l,n})).sort((a,b)=>b.n-a.n);
+  }
+  function topByScore(field,n=3){return [...ads].filter(a=>a[field]!=null&&a[field]!=='').sort((a,b)=>(parseFloat(b[field])||0)-(parseFloat(a[field])||0)).slice(0,n)}
+
+  const byHook=countBy('hook_type');
+  const byAngle=countBy('creative_angle');
+  const byFormat=countBy('creative_format');
+  const byEmotion=countBy('primary_emotional_trigger');
+  const byProof=countBy('proof_type');
+  const byBucket=countBy('creative_bucket');
+  const topAi=topByScore('ai_replication_value');
+  const topUse=topByScore('overall_usefulness_score');
+
+  function barChart(title,rows){
+    if(!rows.length)return`<div class="card" style="margin-bottom:0"><div class="card-title">${title}</div><div style="font-size:12px;color:var(--t3);font-style:italic">Not enough data yet.</div></div>`;
+    const max=rows[0].n;
+    return`<div class="card" style="margin-bottom:0"><div class="card-title">${title}</div>${rows.slice(0,5).map(r=>`<div class="bar-row"><span class="bar-label" title="${esc(cap(r.l))}">${cap(r.l)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(r.n/max*100)}%"></div></div><span class="bar-count">${r.n}</span></div>`).join('')}</div>`;
+  }
+
+  function adListItem(ad){
+    const url=ad.source_url||ad.creative_video_url||'';
+    const score=ad.overall_usefulness_score??'—';
+    const sc=scoreColor(ad.overall_usefulness_score);
+    return`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--r-md);margin-bottom:6px">
+      <span style="font-size:22px;font-weight:700;font-family:var(--mono);color:${sc};flex-shrink:0;line-height:1">${score}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--t3);margin-bottom:2px">${esc(ad.source_platform||'')} · ${cap(ad.hook_type)||'—'}</div>
+        <div style="font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ad.caption_or_ad_copy||ad.hook_text||'No copy')}</div>
+      </div>
+      ${url?`<a href="${esc(url)}" target="_blank" style="font-size:11px;color:var(--accent);flex-shrink:0">Open ↗</a>`:''}
+    </div>`;
+  }
+
+  // Summary sentence
+  let summary='';
+  if(tagged.length===0){summary='Tag your ads to generate pattern insights.';}
+  else{
+    const parts=[];
+    if(byHook[0])parts.push(`Most ads use a "${cap(byHook[0].l)}" hook`);
+    if(byFormat[0])parts.push(`the most common format is ${cap(byFormat[0].l)}`);
+    if(byEmotion[0])parts.push(`primary emotion is ${cap(byEmotion[0].l)}`);
+    if(useful.length)parts.push(`${useful.length} ad${useful.length!==1?'s':''} marked useful`);
+    summary=parts.length?parts.join(', ')+'.':'Not enough tagged data yet.';
+    if(summary)summary=summary.charAt(0).toUpperCase()+summary.slice(1);
+  }
+
+  // What to make next
+  let next='';
+  if(tagged.length>=3){
+    const ht=byHook[0]?.l,fmt=byFormat[0]?.l,em=byEmotion[0]?.l;
+    next=`Based on your top-performing collected ads: focus on <strong>${cap(ht||'strong')}</strong> hooks, use <strong>${cap(fmt||'video')}</strong> format, and trigger <strong>${cap(em||'curiosity')}</strong>. Prioritise replicating the highest AI Replication Value ads first — they represent your fastest path to scalable creatives.`;
+  }else{
+    next='Tag at least 3 ads to generate a recommendation.';
+  }
+
+  document.getElementById('ins-body').innerHTML=`
+    <div class="summary-box">${esc(summary)}</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-num">${ads.length}</div><div class="stat-lbl">Total collected</div></div>
+      <div class="stat-card"><div class="stat-num">${tagged.length}</div><div class="stat-lbl">Tagged</div></div>
+      <div class="stat-card"><div class="stat-num">${useful.length}</div><div class="stat-lbl">Marked useful</div></div>
+      <div class="stat-card"><div class="stat-num">${unreviewed.length}</div><div class="stat-lbl">Unreviewed</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      ${barChart('Top hook types',byHook)}
+      ${barChart('Top creative angles',byAngle)}
+      ${barChart('Top formats',byFormat)}
+      ${barChart('Top emotional triggers',byEmotion)}
+      ${barChart('Top proof types',byProof)}
+      ${barChart('Top creative buckets',byBucket)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">Highest AI replication value</div>
+        ${topAi.length?topAi.map(adListItem).join(''):'<div style="font-size:12px;color:var(--t3);font-style:italic">Recalculate scores on your ads to see rankings.</div>'}
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">Highest overall usefulness</div>
+        ${topUse.length?topUse.map(adListItem).join(''):'<div style="font-size:12px;color:var(--t3);font-style:italic">Recalculate scores on your ads to see rankings.</div>'}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">What should we make next?</div>
+      <div style="font-size:13px;line-height:1.65;color:var(--t1)">${next}</div>
+    </div>`;
+}
+
+// ── Export ─────────────────────────────────────────────────────────────
+function renderExport(){
+  const sel=document.getElementById('exp-db-sel');
+  if(sel){
+    sel.innerHTML=state.databases.map(d=>`<option value="${d.id}"${d.id===state.activeDatabaseId?' selected':''}>${esc(d.name)} (${d.ads.length} ads)</option>`).join('');
+  }
+  const db=getActiveDb();
+  const cnt=document.getElementById('exp-db-count');
+  if(cnt)cnt.textContent=`${db.ads.length} ads will be exported.`;
+}
+function expDbChange(id){state.activeDatabaseId=id;renderExport();renderSidebar();}
+function doExport(fmt){
+  const ads=getActiveDb().ads;
+  if(!ads.length){alert('No ads to export.');return;}
+  const FIELDS=['source_url','creative_video_url','caption_or_ad_copy','transcript','hook_text','hook_type','target_persona','pain_point','desire','creative_angle','creative_format','primary_emotional_trigger','proof_type','virality_mechanic','cta_type','organic_viral_potential','paid_ad_potential','ai_replication_value','overall_usefulness_score','confidence_score','confidence_reason','creative_bucket','tagging_status','ai_tagged_at','why_it_likely_worked','best_reusable_element','recommended_next_creative_test','notes'];
+  let content,type,ext;
+  if(fmt==='json'){
+    content=JSON.stringify(ads.map(a=>{const o={};FIELDS.forEach(f=>o[f]=a[f]??'');return o}),null,2);
+    type='application/json';ext='json';
+  }else{
+    const rows=ads.map(a=>FIELDS.map(f=>`"${String(a[f]??'').replace(/"/g,'""')}"`).join(','));
+    content=[FIELDS.join(','),...rows].join('\n');
+    type='text/csv';ext='csv';
+  }
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`ad-export-${Date.now()}.${ext}`;a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Sidebar ────────────────────────────────────────────────────────────
+function renderSidebar(){
+  const db=getActiveDb();
+  const demo=state.databases.find(d=>d.isDemo);
+  document.getElementById('sb-db-panel').innerHTML=`
+    <div class="sb-footer-label">Active Database</div>
+    <select class="sb-db-select" onchange="switchDb(this.value)">${state.databases.map(d=>`<option value="${d.id}"${d.id===state.activeDatabaseId?' selected':''}>${esc(d.name)} (${d.ads.length})</option>`).join('')}</select>
+    <div class="sb-db-btns">
+      <button class="sb-db-btn" onclick="newDatabase()">+ New</button>
+      ${state.databases.length>1?`<button class="sb-db-btn danger" onclick="deleteDatabase('${db.id}')">🗑 Delete</button>`:''}
+      ${demo?`<button class="sb-db-btn" onclick="resetDemo()" title="Reset demo data">↺ Demo</button>`:''}
+    </div>
+    <div class="sb-status-row"><span class="dot-green"></span>${db.ads.length} ads${db.isDemo?' <span style="color:var(--amber)">(demo)</span>':''}</div>`;
+  // Update export db sel if visible
+  if(state.currentPage==='export')renderExport();
+  // Update collect db sel
+  const csel=document.getElementById('scrape-db-sel');
+  if(csel)csel.innerHTML=state.databases.filter(d=>!d.isDemo).map(d=>`<option value="${d.id}"${d.id===state.activeDatabaseId?' selected':''}>${esc(d.name)}</option>`).join('');
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────
+function showPage(id){
+  state.currentPage=id;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(n=>n.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg)pg.classList.add('active');
+  const nav=document.getElementById('nav-'+id);
+  if(nav)nav.classList.add('active');
+  closePanel();
+  renderCurrentPage();
+}
+
+function renderCurrentPage(){
+  if(state.currentPage==='library')renderLibrary();
+  else if(state.currentPage==='insights')renderInsights();
+  else if(state.currentPage==='export')renderExport();
+}
+
+// ── Collect simulation ─────────────────────────────────────────────────
+const actorDescs={meta:'Scrapes Facebook / Instagram Ad Library. Requires keyword.',tiktok:'Scrapes TikTok top ads by keyword.',ig:'Scrapes Instagram posts by hashtag or keyword.'};
+function selActor(id){
+  ['meta','tiktok','ig'].forEach(a=>{
+    const b=document.getElementById('act-'+a);
+    if(b)b.className='actor-btn'+(a===id?' '+id+'-act':'');
+  });
+  state.scrapeActor=id;
+  const d=document.getElementById('actor-desc');
+  if(d)d.textContent=actorDescs[id];
+}
+function doScrape(){
+  const kw=document.getElementById('kw-in').value.trim();
+  if(!kw){document.getElementById('kw-in').focus();return;}
+  const pill=document.getElementById('scrape-pill');
+  pill.className='status-running';pill.textContent='RUNNING';pill.style.display='inline-block';
+  document.getElementById('scrape-results').style.display='none';
+  setTimeout(()=>{
+    pill.className='status-ok';pill.textContent='SUCCEEDED';
+    document.getElementById('scrape-results').style.display='block';
+    renderSidebar(); // refresh db selector in collect
+  },2200);
+}
+function saveScrapeResults(){
+  const selEl=document.getElementById('scrape-db-sel');
+  const dbId=selEl?.value||state.activeDatabaseId;
+  const db=state.databases.find(d=>d.id===dbId);
+  if(!db){alert('Select a database first.');return;}
+  alert(`In the real app, 58 scraped ads would be saved to "${db.name}".\nThis is a simulation — connect to the Next.js backend to enable real scraping.`);
+}
+
+// ── Settings ───────────────────────────────────────────────────────────
+function clearAllData(){
+  if(!confirm('Clear ALL data and reset the app? This cannot be undone.'))return;
+  localStorage.removeItem('adIntel_v2');
+  location.reload();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+loadState();
+renderSidebar();
+showPage(state.currentPage||'library');
+</script>
+</body>
+</html>
