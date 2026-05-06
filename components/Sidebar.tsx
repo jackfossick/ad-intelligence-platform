@@ -7,6 +7,7 @@ import { useDb } from "@/lib/db-context";
 const NAV = [
   { href: "/collect",  icon: "⊕", label: "Collect",       group: "main"   },
   { href: "/library",  icon: "⊞", label: "Library",        group: "main"   },
+  { href: "/validate", icon: "✓", label: "Validate",       group: "main"   },
   { href: "/insights", icon: "◈", label: "Key Insights",   group: "main"   },
   { href: "/export",   icon: "↓", label: "Export",         group: "main"   },
   { href: "/settings", icon: "⚙", label: "Settings",       group: "system" },
