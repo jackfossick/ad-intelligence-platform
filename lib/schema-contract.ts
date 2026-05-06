@@ -174,26 +174,31 @@ export type ValidationSummary = {
   blocked: number;           // hard errors — would be excluded from export
   withWarnings: number;      // soft issues — exportable but degraded
   clean: number;             // no issues
-  missingFields: { label: string; count: number }[];
-  enumViolations: { label: string; count: number }[];
+  missingFields: { field: string; label: string; count: number }[];
+  enumViolations: { field: string; label: string; count: number }[];
 };
 
 export function summariseValidation(results: RowValidationResult[]): ValidationSummary {
-  const missCount: Record<string, number> = {};
-  const enumCount: Record<string, number> = {};
+  const missCount: Record<string, { label: string; count: number }> = {};
+  const enumCount: Record<string, { label: string; count: number }> = {};
 
   let blocked = 0, withWarnings = 0;
 
   for (const r of results) {
-    if (r.blocked) { blocked++; continue; }
-    const hasWarn = r.issues.some((i) => i.severity === "warning");
-    if (hasWarn) withWarnings++;
+    if (r.blocked) blocked++;
+    else if (r.issues.some((i) => i.severity === "warning")) withWarnings++;
 
+    // Tally field-level issues across all rows (incl. blocked) so the
+    // "Most common issue" callout reflects the real fix-list.
     for (const issue of r.issues) {
       if (issue.message.startsWith("Required") || issue.message.startsWith("Recommended")) {
-        missCount[issue.label] = (missCount[issue.label] || 0) + 1;
+        const slot = missCount[issue.field] ?? { label: issue.label, count: 0 };
+        slot.count += 1;
+        missCount[issue.field] = slot;
       } else if (issue.message.includes("not a recognised value")) {
-        enumCount[issue.label] = (enumCount[issue.label] || 0) + 1;
+        const slot = enumCount[issue.field] ?? { label: issue.label, count: 0 };
+        slot.count += 1;
+        enumCount[issue.field] = slot;
       }
     }
   }
@@ -203,7 +208,11 @@ export function summariseValidation(results: RowValidationResult[]): ValidationS
     blocked,
     withWarnings,
     clean: results.length - blocked - withWarnings,
-    missingFields: Object.entries(missCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
-    enumViolations: Object.entries(enumCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+    missingFields: Object.entries(missCount)
+      .map(([field, v]) => ({ field, label: v.label, count: v.count }))
+      .sort((a, b) => b.count - a.count),
+    enumViolations: Object.entries(enumCount)
+      .map(([field, v]) => ({ field, label: v.label, count: v.count }))
+      .sort((a, b) => b.count - a.count),
   };
 }
