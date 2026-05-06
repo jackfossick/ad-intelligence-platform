@@ -568,6 +568,10 @@ export default function LibraryPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting,      setDeleting]      = useState(false);
 
+  // Bulk-action toolbar (selection-driven Mark useful / skip / delete + hard delete)
+  const [bulkActing, setBulkActing] = useState<null | "useful" | "skip" | "mark_delete" | "hard_delete">(null);
+  const [bulkActionMsg, setBulkActionMsg] = useState<string | null>(null);
+
   const PAGE_SIZE = viewMode === "detailed" ? PAGE_SIZE_DETAILED : PAGE_SIZE_COMPACT;
 
   const fetchAds = useCallback(async () => {
@@ -726,6 +730,82 @@ export default function LibraryPage() {
     [allAds]
   );
 
+  // Selection-driven bulk actions (mark useful / skip / mark-delete / hard delete)
+  const runBulkPatch = useCallback(async (
+    kind: "useful" | "skip" | "mark_delete",
+    patch: Record<string, unknown>,
+    successLabel: string,
+  ) => {
+    if (checkedIds.size === 0 || bulkActing) return;
+    const ids = Array.from(checkedIds);
+    setBulkActing(kind);
+    setBulkActionMsg(null);
+    try {
+      const res = await fetch("/api/ads/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, patch }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text();
+        setBulkActionMsg(`Bulk ${kind} failed: ${errBody}`);
+        return;
+      }
+      const data = await res.json() as { updated: number; requested: number };
+      const idSet = new Set(ids);
+      setAllAds((prev) => prev.map((a) => idSet.has(a.id as string) ? { ...a, ...patch } : a));
+      setSelected((prev) => prev && idSet.has(prev.id as string) ? { ...prev, ...patch } : prev);
+      setCheckedIds(new Set());
+      setBulkActionMsg(
+        data.updated === data.requested
+          ? `${successLabel} ${data.updated} ad${data.updated === 1 ? "" : "s"}.`
+          : `${successLabel} ${data.updated} of ${data.requested} ads (${data.requested - data.updated} skipped).`,
+      );
+    } catch (e) {
+      setBulkActionMsg(`Bulk ${kind} failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBulkActing(null);
+    }
+  }, [checkedIds, bulkActing]);
+
+  const handleBulkMarkUseful = () => runBulkPatch("useful",      { reviewStatus: "reviewed", usefulnessStatus: "useful" },    "Marked");
+  const handleBulkMarkSkip   = () => runBulkPatch("skip",        { reviewStatus: "reviewed", usefulnessStatus: "uncertain" }, "Skipped");
+  const handleBulkMarkDelete = () => runBulkPatch("mark_delete", { recommendedAction: "delete_candidate" },                   "Flagged for delete");
+
+  const handleBulkHardDelete = useCallback(async () => {
+    if (checkedIds.size === 0 || bulkActing) return;
+    const ids = Array.from(checkedIds);
+    if (!confirm(`Delete ${ids.length} ad${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setBulkActing("hard_delete");
+    setBulkActionMsg(null);
+    try {
+      const res = await fetch("/api/ads/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text();
+        setBulkActionMsg(`Bulk delete failed: ${errBody}`);
+        return;
+      }
+      const data = await res.json() as { deleted: number; requested: number };
+      const idSet = new Set(ids);
+      setAllAds((prev) => prev.filter((a) => !idSet.has(a.id as string)));
+      setSelected((prev) => prev && idSet.has(prev.id as string) ? null : prev);
+      setCheckedIds(new Set());
+      setBulkActionMsg(
+        data.deleted === data.requested
+          ? `Deleted ${data.deleted} ad${data.deleted === 1 ? "" : "s"}.`
+          : `Deleted ${data.deleted} of ${data.requested} ads (${data.requested - data.deleted} skipped).`,
+      );
+    } catch (e) {
+      setBulkActionMsg(`Bulk delete failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBulkActing(null);
+    }
+  }, [checkedIds, bulkActing]);
+
   const handleBulkDeleteConfirm = async () => {
     setDeleting(true);
     let deleted = 0;
@@ -791,6 +871,72 @@ export default function LibraryPage() {
           </button>
         )}
       </div>
+
+      {/* ── Bulk-action bar (selection-driven) ─────────────────── */}
+      {checkedIds.size > 0 && (
+        <div style={{
+          display: "flex", gap: 8, alignItems: "center", marginBottom: 12,
+          padding: "8px 12px",
+          background: "#EEEDFE", border: "1px solid #C7C3F1", color: "#26215C",
+          borderRadius: 8, fontSize: 12, flexWrap: "wrap",
+        }}>
+          <span style={{ fontWeight: 600 }}>{checkedIds.size} selected</span>
+          <span style={{ width: 1, height: 16, background: "#C7C3F1" }} />
+          <button
+            type="button" className="btn btn-sm" onClick={handleBulkMarkUseful}
+            disabled={!!bulkActing}
+            style={{ fontSize: 11 }}
+          >
+            {bulkActing === "useful" ? "Marking…" : "✓ Mark useful"}
+          </button>
+          <button
+            type="button" className="btn btn-sm" onClick={handleBulkMarkSkip}
+            disabled={!!bulkActing}
+            style={{ fontSize: 11 }}
+          >
+            {bulkActing === "skip" ? "Marking…" : "↷ Mark skip"}
+          </button>
+          <button
+            type="button" className="btn btn-sm" onClick={handleBulkMarkDelete}
+            disabled={!!bulkActing}
+            style={{ fontSize: 11, color: "#854F0B", borderColor: "#EF9F27" }}
+          >
+            {bulkActing === "mark_delete" ? "Marking…" : "⚑ Mark delete"}
+          </button>
+          <span style={{ width: 1, height: 16, background: "#C7C3F1" }} />
+          <button
+            type="button" className="btn btn-sm" onClick={handleBulkHardDelete}
+            disabled={!!bulkActing}
+            style={{ fontSize: 11, color: "#991B1B", borderColor: "#DC2626" }}
+          >
+            {bulkActing === "hard_delete" ? "Deleting…" : "🗑 Delete"}
+          </button>
+          <button
+            type="button" className="btn btn-sm" onClick={() => setCheckedIds(new Set())}
+            disabled={!!bulkActing}
+            style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-text-secondary)" }}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+      {bulkActionMsg && (
+        <div style={{
+          marginBottom: 12, padding: "6px 12px", borderRadius: 6, fontSize: 12,
+          background: bulkActionMsg.toLowerCase().includes("failed") ? "#FCEBEB" : "#EAF3DE",
+          color: bulkActionMsg.toLowerCase().includes("failed") ? "#791F1F" : "#27500A",
+          border: `1px solid ${bulkActionMsg.toLowerCase().includes("failed") ? "#F7C1C1" : "#C0DD97"}`,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span>{bulkActionMsg}</span>
+          <button
+            type="button" onClick={() => setBulkActionMsg(null)}
+            style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 12, color: "inherit" }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Delete modal ──────────────────────────────────────── */}
       {confirmDelete && (
