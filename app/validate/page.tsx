@@ -116,9 +116,18 @@ export default function ValidatePage() {
               {topMissing ? `Missing ${topMissing.label} (${topMissing.count} ads)` : "None — dataset clean"}
             </strong>
           </span>
+          {topMissing && (
+            <Link
+              href={`/review?missing=${encodeURIComponent(topMissing.field)}${dbId ? `&dbId=${dbId}` : ""}`}
+              className="btn btn-sm"
+              style={{ marginLeft: "auto", textDecoration: "none" }}
+            >
+              Fix all in Review →
+            </Link>
+          )}
           <button
             className="btn btn-secondary btn-sm"
-            style={{ marginLeft: "auto" }}
+            style={topMissing ? undefined : { marginLeft: "auto" }}
             onClick={load}
             disabled={loading}
           >

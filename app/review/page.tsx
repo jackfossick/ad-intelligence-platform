@@ -25,6 +25,28 @@ function isReviewed(ad: Ad): boolean {
   return String(ad.reviewStatus ?? "") === "reviewed";
 }
 
+// Mirrors the schema-contract export-key → ad-source mapping for the small
+// set of fields fixable inside Review mode. `?missing=<exportKey>` from
+// Validate's "Fix all" button lands here.
+const MISSING_SOURCES: Record<string, string[]> = {
+  hook:                ["hookType"],
+  format:              ["formatType"],
+  creative_video_url:  ["creativeVideoUrl"],
+  ad_copy:             ["adCopy", "hookExample", "description"],
+  platform:            ["platform"],
+  ad_url:              ["referenceUrl", "adLibraryUrl", "adLink"],
+};
+
+function fieldIsMissing(ad: Ad, exportKey: string): boolean {
+  const sources = MISSING_SOURCES[exportKey];
+  if (!sources) return false;
+  for (const src of sources) {
+    const v = ad[src];
+    if (v !== null && v !== undefined && v !== "") return false;
+  }
+  return true;
+}
+
 function platformLabel(p: unknown): string {
   return typeof p === "string" && p.trim() ? p : "—";
 }
@@ -63,6 +85,7 @@ function ReviewPage() {
   // Honour ?dbId= from URL
   const urlDbId  = params.get("dbId") ?? "";
   const focusId  = params.get("focusId") ?? "";
+  const missing  = params.get("missing") ?? "";
   const dbId     = urlDbId || activeDb?.id || "";
 
   useEffect(() => {
@@ -96,11 +119,17 @@ function ReviewPage() {
   useEffect(() => { load(); }, [load]);
 
   // Build queue: unreviewed first; if focusId given, include it even if reviewed.
+  // If ?missing=<exportKey> is set, restrict the queue to ads where that field
+  // is empty (so "Fix all in Review" from Validate lands users on the gap list).
   const queue = useMemo(() => {
     const focused = focusId ? allAds.filter((a) => a.id === focusId) : [];
-    const rest    = allAds.filter((a) => !isReviewed(a) && a.id !== focusId);
-    return [...focused, ...rest];
-  }, [allAds, focusId]);
+
+    let pool = allAds.filter((a) => !isReviewed(a) && a.id !== focusId);
+    if (missing) {
+      pool = pool.filter((a) => fieldIsMissing(a, missing));
+    }
+    return [...focused, ...pool];
+  }, [allAds, focusId, missing]);
 
   const [cursor, setCursor] = useState(0);
   // Reset cursor when the queue identity meaningfully changes
