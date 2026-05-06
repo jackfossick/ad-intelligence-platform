@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default function AdDetailPage({ params }: { params: { id: string } }) {
-  // Redirect direct /ads/:id visits to /ads (panel opens client-side)
+export default async function AdDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  await params;
   redirect("/ads");
 }
