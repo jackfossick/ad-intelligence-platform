@@ -11,6 +11,7 @@ const NAV = [
   { href: "/validate", icon: "✓", label: "Validate",       group: "main"   },
   { href: "/insights", icon: "◈", label: "Key Insights",   group: "main"   },
   { href: "/export",   icon: "↓", label: "Export",         group: "main"   },
+  { href: "/jobs",     icon: "≡", label: "Job Log",        group: "system" },
   { href: "/settings", icon: "⚙", label: "Settings",       group: "system" },
   { href: "/databases",icon: "◫", label: "Databases",      group: "system" },
 ];
