@@ -8,8 +8,6 @@ export const metadata: Metadata = {
   description: "Internal creative intelligence and ad replication tool",
 };
 
-export const dynamic = "force-dynamic";
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
