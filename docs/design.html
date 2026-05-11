@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ad Intelligence Platform — Design Reference</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#5B4FD9;--al:#EEEDFE;--am:#AFA9EC;--ad:#26215C;
+  --green:#27A06A;--gl:#E1F5EE;--gd:#085041;
+  --amber:#D4870A;--ambl:#FEF3DA;
+  --red:#D14040;--rl:#FEECEC;--rd:#7A1F1F;
+  --bg:#f8f8f6;--bg2:#fff;--bg3:#f1efe8;
+  --text:#1a1a18;--text2:#73726c;--text3:#9c9a92;
+  --border:#e8e6df;--border2:#d3d1c7;
+  --radius:8px;--radius-lg:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#e8e6df;display:flex;align-items:flex-start;justify-content:center;padding:24px;min-height:100vh}
+.app{display:grid;grid-template-columns:52px 1fr;width:100%;max-width:1200px;min-height:720px;border-radius:16px;overflow:hidden;border:1px solid var(--border2);background:var(--bg)}
+
+/* SIDEBAR */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:4px}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:12px;flex-shrink:0}
+.logo-sq{width:12px;height:12px;border-radius:3px;background:#fff;opacity:.9}
+.ni{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;transition:background .15s}
+.ni:hover{background:var(--bg3)}
+.ni.on{background:var(--al)}
+.ni svg{flex-shrink:0}
+.ndiv{width:20px;height:1px;background:var(--border);margin:6px 0}
+.nbot{margin-top:auto}
+.tip{display:none;position:absolute;left:46px;top:50%;transform:translateY(-50%);background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:4px 9px;font-size:11px;white-space:nowrap;color:var(--text);z-index:100;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.ni:hover .tip{display:block}
+
+/* MAIN */
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{display:flex;align-items:center;gap:10px;padding:11px 18px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.ptitle{font-size:14px;font-weight:500;color:var(--text)}
+.dbchip{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid var(--border2);font-size:11px;color:var(--text2);cursor:pointer}
+.dbchip:hover{background:var(--bg3)}
+.pulsedot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.tr{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hpill{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:var(--bg3);font-size:11px;color:var(--text2)}
+.hmini{width:48px;height:4px;border-radius:2px;background:var(--border2);overflow:hidden}
+.hfill{height:100%;width:62%;background:var(--green);border-radius:2px}
+.hpct{font-weight:500;color:var(--gd)}
+.btn{padding:6px 14px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);color:var(--text);background:var(--bg2)}
+.btn:hover{background:var(--bg3)}
+.btnp{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btnp:hover{background:#4a3fc4}
+.btnd{border-color:var(--red);color:var(--rd)}
+.btnd:hover{background:var(--rl)}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;padding:18px;background:var(--bg)}
+.view{display:none}
+.view.on{display:block}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
+.ct{font-size:12px;font-weight:500;color:var(--text);margin-bottom:12px}
+.cs{font-size:11px;color:var(--text2);margin-bottom:14px;margin-top:-8px}
+
+/* KPI */
+.krow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;position:relative;overflow:hidden}
+.kac{position:absolute;top:0;left:0;width:3px;height:100%;border-radius:3px 0 0 3px}
+.kl{font-size:11px;color:var(--text2);margin-bottom:8px}
+.kv{font-size:24px;font-weight:500;color:var(--text);line-height:1}
+.ks{font-size:11px;margin-top:5px;color:var(--text2)}
+.ks.up{color:var(--green)}.ks.dn{color:var(--red)}
+
+/* LAYOUT */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.full{margin-bottom:10px}
+
+/* HOOK TABLE */
+.hrow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.hl{font-size:11px;color:var(--text2);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbar{flex:1;height:7px;border-radius:4px;background:var(--bg3);overflow:hidden}
+.hbf{height:100%;border-radius:4px;background:var(--accent)}
+.hsc{font-size:12px;font-weight:500;min-width:26px;text-align:right}
+.hct{font-size:10px;color:var(--text2);min-width:20px;text-align:right}
+
+/* HEALTH RING */
+.hring-wrap{display:flex;align-items:center;gap:14px}
+.hbrow{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px}
+.hbdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.hblbl{flex:1;color:var(--text2)}
+.hbbar{width:80px;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.hbfill{height:100%;border-radius:3px}
+.hbct{min-width:22px;text-align:right;font-weight:500;color:var(--text)}
+
+/* TOP ADS */
+.trow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.trow:last-child{border-bottom:none}
+.tidx{font-size:11px;color:var(--text2);width:14px;text-align:center;flex-shrink:0}
+.tthumb{width:28px;height:42px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.ptri{width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;margin-left:2px}
+.tinfo{flex:1;min-width:0}
+.tcopy{font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tgrow{display:flex;gap:4px}
+.tag{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--bg3);color:var(--text2)}
+.taghk{background:var(--al);color:var(--ad)}
+.tscore{font-size:15px;font-weight:500;color:var(--green);flex-shrink:0}
+
+/* GAP PILLS */
+.gpwrap{display:flex;gap:7px;flex-wrap:wrap}
+.gp{padding:5px 11px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid}
+.gpok{background:var(--gl);color:var(--gd);border-color:#9FE1CB}
+.gpwarn{background:var(--ambl);color:#633806;border-color:#FAC775}
+.gperr{background:var(--rl);color:var(--rd);border-color:#F7C1C1}
+
+/* LIBRARY */
+.ltb{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.scopeg{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden}
+.scbtn{padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text2);background:var(--bg2);border:none;border-right:1px solid var(--border)}
+.scbtn:last-child{border-right:none}
+.scbtn.on{background:var(--accent);color:#fff;font-weight:500}
+.fchip{padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid var(--border);color:var(--text2);cursor:pointer;background:var(--bg2)}
+.fchip:hover{background:var(--bg3)}
+.fchip.on{border-color:var(--accent);color:var(--ad);background:var(--al);font-weight:500}
+.sep{width:1px;height:18px;background:var(--border);flex-shrink:0}
+.ctlbl{font-size:11px;color:var(--text2);margin-left:auto}
+.vbtns{display:flex;gap:4px}
+.vbtn{padding:5px 10px;border-radius:var(--radius);border:1px solid var(--border);font-size:11px;cursor:pointer;background:var(--bg2);color:var(--text2)}
+.vbtn.on{background:var(--bg3);color:var(--text)}
+.uvbar{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--ambl);border:1px solid #FAC775;border-radius:var(--radius);font-size:12px;color:#633806;margin-bottom:12px}
+.wdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+.adgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.acard{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg2);cursor:pointer;transition:border-color .15s}
+.acard:hover{border-color:var(--border2)}
+.thumb{width:100%;aspect-ratio:9/16;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.tplay{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center}
+.ppip{position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500}
+.spip{position:absolute;top:8px;right:8px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:500;background:rgba(0,0,0,.5);color:#fff}
+.abody{padding:11px}
+.ahktag{display:inline-block;font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;background:var(--al);color:var(--ad);margin-bottom:6px}
+.acopy{font-size:11px;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.afoot{display:flex;align-items:center;gap:6px;margin-top:8px}
+.fmttag{font-size:10px;color:var(--text2);background:var(--bg3);padding:2px 6px;border-radius:3px}
+.sdot{width:6px;height:6px;border-radius:50%;margin-left:auto;flex-shrink:0}
+.sdg{background:var(--green)}.sdb{background:#378ADD}
+
+/* REVIEW */
+.rwrap{display:grid;grid-template-columns:1fr 280px;gap:12px}
+.rmain{display:flex;flex-direction:column;gap:12px}
+.pgrow{display:flex;align-items:center;gap:10px}
+.pgbar{flex:1;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.pgfill{height:100%;background:var(--accent);width:34%;border-radius:2px}
+.pglbl{font-size:11px;color:var(--text2)}
+.rcard{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg2)}
+.rchead{padding:11px 14px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px}
+.rcbody{padding:14px;display:flex;flex-direction:column;gap:12px}
+.flbl{font-size:10px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.fval{font-size:13px;color:var(--text);line-height:1.5}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.isel{width:100%;padding:7px 8px;border-radius:var(--radius);border:1px solid var(--border2);font-size:12px;background:var(--bg2);color:var(--text)}
+.isel.err{border-color:var(--red);background:var(--rl)}
+.arow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.abtn{padding:10px 6px;border-radius:var(--radius);border:1px solid var(--border);font-size:12px;font-weight:500;cursor:pointer;background:var(--bg2);color:var(--text);display:flex;align-items:center;justify-content:center;gap:6px}
+.abtn:hover{background:var(--bg3)}
+.abk{border-color:var(--green);color:var(--gd)}.abk:hover{background:var(--gl)}
+.abs{color:var(--text2)}
+.abf{border-color:var(--amber);color:#633806}.abf:hover{background:var(--ambl)}
+.abd{border-color:var(--red);color:var(--rd)}.abd:hover{background:var(--rl)}
+.kbd{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);border:1px solid var(--border2);font-size:9px;color:var(--text2)}
+.hintrow{display:flex;gap:14px;font-size:11px;color:var(--text2)}
+.rsidebar{display:flex;flex-direction:column;gap:14px}
+.scard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px}
+.sctitle{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.vi{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:7px}
+.vic{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;font-weight:500}
+.viok{background:var(--gl);color:var(--gd)}.vierr{background:var(--rl);color:var(--rd)}.viwarn{background:var(--ambl);color:#633806}
+.sring{position:relative;width:60px;height:60px;flex-shrink:0}
+.sring svg{transform:rotate(-90deg)}
+.sinr{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.sbig{font-size:14px;font-weight:500;color:var(--text)}
+.stny{font-size:9px;color:var(--text2)}
+.serow{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);padding:3px 0}
+
+/* VALIDATE */
+.sumrow{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:14px}
+.vsn{font-size:20px;font-weight:500}
+.vsl{font-size:11px;color:var(--text2)}
+.fstrip{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.vtbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.vtbl th{padding:7px 10px;text-align:left;font-size:10px;font-weight:500;color:var(--text2);border-bottom:1px solid var(--border);background:var(--bg3)}
+.vtbl td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.vtbl tr:hover td{background:var(--bg3)}
+.miss{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--red)}
+.mdot{width:5px;height:5px;border-radius:50%;background:var(--red);flex-shrink:0}
+.rbar{display:inline-block;width:50px;height:4px;border-radius:2px;overflow:hidden;background:var(--bg3);vertical-align:middle;margin-right:4px}
+.rbf{height:100%;border-radius:2px}
+.fixbtn{font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border2);cursor:pointer;background:var(--bg2);color:var(--text)}
+.fixbtn:hover{background:var(--bg3)}
+
+/* EXPORT */
+.explayout{display:grid;grid-template-columns:1fr 240px;gap:12px}
+.cpcard{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px}
+.cphead{padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;border-bottom:1px solid var(--border)}
+.cpok{background:var(--gl);color:var(--gd)}.cpwarn{background:var(--ambl);color:#633806}.cperr{background:var(--rl);color:var(--rd)}
+.cpbody{padding:12px 14px}
+.cprow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.cprow:last-child{border-bottom:none}
+.cpk{color:var(--text2)}.cpv{font-weight:500}
+.cvok{color:var(--gd)}.cvwarn{color:#633806}.cverr{color:var(--rd)}
+.blknotice{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--rl);border:1px solid #F7C1C1;border-radius:10px;font-size:12px;color:var(--rd);margin-bottom:12px}
+.bnic{width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;margin-top:1px}
+.fmtrow{display:flex;gap:8px;margin-bottom:12px}
+.fmtopt{flex:1;padding:9px;border-radius:var(--radius);border:1px solid var(--border);text-align:center;cursor:pointer;font-size:12px;color:var(--text2)}
+.fmtopt:hover{background:var(--bg3)}
+.fmtopt.sel{border-color:var(--accent);background:var(--al);color:var(--ad);font-weight:500}
+.expbtnm{width:100%;padding:11px;border-radius:9px;font-size:13px;font-weight:500;cursor:not-allowed;opacity:.4;background:var(--accent);color:#fff;border:none}
+.expbtns{width:100%;padding:8px;border-radius:var(--radius);font-size:12px;cursor:pointer;background:var(--bg2);border:1px solid var(--border2);color:var(--text);margin-top:6px}
+.expbtns:hover{background:var(--bg3)}
+.donutwrap{display:flex;flex-direction:column;align-items:center;padding:14px;background:var(--bg3);border-radius:10px;margin-bottom:12px}
+.dsrow{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.dsrow:last-child{border-bottom:none}
+.dsk{color:var(--text2)}.dsv{font-weight:500;color:var(--text)}
+
+/* COLLECT */
+.modetog{display:flex;background:var(--bg3);border-radius:10px;padding:3px;gap:2px}
+.mtbtn{padding:6px 14px;border-radius:var(--radius);font-size:12px;cursor:pointer;color:var(--text2);background:transparent;border:none;font-weight:400;transition:all .15s}
+.mtbtn.on{background:var(--bg2);color:var(--text);font-weight:500;border:1px solid var(--border)}
+.stabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2)}
+.stab{padding:10px 18px;font-size:12px;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent}
+.stab:hover{color:var(--text)}
+.stab.on{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+.spane{display:none}.spane.on{display:block}
+
+/* FAST MODE */
+.fsbox{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg);overflow:hidden}
+.fsinner{display:flex;align-items:flex-start}
+.aiicon{padding:14px 12px 14px 16px;flex-shrink:0}
+.aispark{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#6C3FB5,var(--accent));display:flex;align-items:center;justify-content:center}
+.fsta{flex:1;padding:14px 0;border:none;outline:none;font-size:13px;color:var(--text);background:transparent;resize:none;min-height:56px;font-family:inherit;line-height:1.5}
+.fsrun{padding:10px 16px;border:none;border-left:1px solid var(--border);background:var(--bg3);cursor:pointer;font-size:12px;font-weight:500;color:var(--text);align-self:stretch;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.fsrun:hover{background:var(--al);color:var(--ad)}
+.exwrap{display:flex;gap:7px;flex-wrap:wrap}
+.expill{padding:6px 12px;border-radius:20px;border:1px solid var(--border);font-size:11px;color:var(--text2);cursor:pointer;background:var(--bg2)}
+.expill:hover{background:var(--bg3);border-color:var(--border2)}
+.infcard{border:1px solid var(--accent);border-radius:var(--radius-lg);background:var(--al);padding:14px;display:none}
+.infcard.show{display:block}
+.infhd{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.infgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.infitem{background:#fff;border-radius:var(--radius);padding:10px;border:1px solid #AFA9EC}
+.inflbl{font-size:10px;color:#534AB7;font-weight:500;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+.infval{font-size:12px;font-weight:500;color:var(--ad)}
+.infacts{display:flex;gap:8px;align-items:center}
+.infnote{font-size:11px;color:#534AB7;margin-left:auto}
+
+/* REGULAR MODE */
+.platgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.platcard{border:1px solid var(--border);border-radius:10px;padding:11px;cursor:pointer;transition:all .15s}
+.platcard:hover{border-color:var(--border2)}
+.platcard.sel{border-color:var(--accent);background:var(--al)}
+.platicon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#fff;margin-bottom:7px}
+.platname{font-size:12px;font-weight:500;color:var(--text)}
+.platsub{font-size:10px;color:var(--text2);margin-bottom:6px}
+.platchk{width:14px;height:14px;border-radius:50%;border:1px solid var(--border2)}
+.platchk.on{background:var(--accent);border-color:var(--accent);display:flex;align-items:center;justify-content:center}
+.platchk.on::after{content:'';width:6px;height:6px;border-radius:50%;background:#fff;display:block}
+.tagwrap{display:flex;flex-wrap:wrap;gap:5px;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border2);min-height:36px;cursor:text;align-items:center}
+.kwtag{display:flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--al);color:var(--ad);font-size:11px;font-weight:500}
+.kwx{cursor:pointer;font-size:12px;opacity:.6}.kwx:hover{opacity:1}
+.taginp{border:none;outline:none;font-size:12px;background:transparent;color:var(--text);min-width:80px;padding:2px 0}
+.rrow{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)}
+.rrow input[type=range]{flex:1;accent-color:var(--accent)}
+.rval{font-weight:500;color:var(--text);min-width:30px;text-align:right}
+.field{margin-bottom:12px}
+.flbl2{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:5px;display:flex;align-items:center;gap:5px}
+.fhint{font-size:10px;font-weight:400}
+.chkrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-bottom:8px}
+.chkrow input{accent-color:var(--accent);width:13px;height:13px}
+.sel{width:100%;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border2);font-size:12px;background:var(--bg2);color:var(--text)}
+.inp{width:100%;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border2);font-size:12px;background:var(--bg2);color:var(--text)}
+.runpanel{background:var(--bg3);border-radius:10px;padding:14px;margin-top:0}
+.runsum{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:12px}
+.rsitem{display:flex;flex-direction:column;gap:2px}
+.rsval{font-size:13px;font-weight:500;color:var(--text)}
+.runacts{display:flex;gap:8px;align-items:center}
+.runnote{font-size:11px;color:var(--text2);margin-left:auto}
+
+/* JOB HISTORY */
+.joblist{display:flex;flex-direction:column;gap:8px}
+.jobrow{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px 16px;display:flex;align-items:center;gap:12px}
+.jsdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.jsrun{background:var(--accent)}.jsdone{background:var(--green)}.jsfail{background:var(--red)}.jsq{background:#B4B2A9}
+.jinfo{flex:1;min-width:0}
+.jtitle{font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px}
+.jmeta{font-size:11px;color:var(--text2)}
+.jpb{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:6px}
+.jpbf{height:100%;border-radius:2px;background:var(--accent)}
+.jbadge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500}
+.jbrun{background:#E6F1FB;color:#0C447C}.jbdone{background:var(--gl);color:var(--gd)}.jbfail{background:var(--rl);color:var(--rd)}.jbq{background:var(--bg3);color:var(--text2)}
+.jct{font-size:13px;font-weight:500;color:var(--text);text-align:right;flex-shrink:0;min-width:50px}
+
+/* AI TAGGING */
+.aibanner{background:linear-gradient(90deg,#EEEDFE,#F5F0FF);border:1px solid #AFA9EC;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.aibicon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#6C3FB5,var(--accent));display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.aibtitle{font-size:13px;font-weight:500;color:var(--ad);margin-bottom:2px}
+.aibsub{font-size:11px;color:#534AB7}
+.aibacts{display:flex;gap:8px;flex-shrink:0}
+.libmini{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.lmhead{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:12px}
+.ltbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.ltbl th{padding:7px 10px;text-align:left;font-size:10px;font-weight:500;color:var(--text2);border-bottom:1px solid var(--border);background:var(--bg3)}
+.ltbl td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ltbl tr:last-child td{border-bottom:none}
+.ltbl tr:hover td{background:var(--bg3)}
+.misst{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--red)}
+.aitag{font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--accent);color:var(--accent);cursor:pointer;background:transparent;font-weight:500}
+.aitag:hover{background:var(--al)}
+.aitagd{font-size:11px;background:var(--al);color:var(--ad);padding:2px 7px;border-radius:4px;font-weight:500;display:flex;align-items:center;gap:4px}
+.aidot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+
+/* IMPORT */
+.dropzone{border:1px dashed var(--border2);border-radius:10px;padding:26px;text-align:center;cursor:pointer;margin-bottom:12px}
+.dropzone:hover{background:var(--bg3)}
+
+/* FOOTER */
+.footbar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--bg2);border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+.ftstats{margin-left:auto;display:flex;gap:14px}
+
+/* BADGE */
+.badge{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo"><div class="logo-sq"></div></div>
+    <div class="ni on" onclick="go('analytics',this)" title="Analytics">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="9" width="3" height="6" rx="1" fill="#534AB7"/><rect x="6" y="5" width="3" height="10" rx="1" fill="#534AB7"/><rect x="11" y="2" width="3" height="13" rx="1" fill="#534AB7"/></svg>
+      <span class="tip">Analytics</span>
+    </div>
+    <div class="ni" onclick="go('library',this)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" stroke="#73726c" stroke-width="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.5" stroke="#73726c" stroke-width="1.2"/><rect x="1" y="9" width="6" height="6" rx="1.5" stroke="#73726c" stroke-width="1.2"/><rect x="9" y="9" width="6" height="6" rx="1.5" stroke="#73726c" stroke-width="1.2"/></svg>
+      <span class="tip">Library</span>
+    </div>
+    <div class="ni" onclick="go('review',this)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#73726c" stroke-width="1.2"/><path d="M5 8l2 2 4-4" stroke="#73726c" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="tip">Review</span>
+    </div>
+    <div class="ndiv"></div>
+    <div class="ni" onclick="go('validate',this)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L10 5h4l-3 3 1 4-4-2-4 2 1-4L2 5h4L8 1z" stroke="#73726c" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      <span class="tip">Validate</span>
+    </div>
+    <div class="ni" onclick="go('export',this)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10V2m0 8l-3-3m3 3l3-3" stroke="#73726c" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12h12" stroke="#73726c" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <span class="tip">Export</span>
+    </div>
+    <div class="ndiv"></div>
+    <div class="ni nbot" onclick="go('collect',this)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#73726c" stroke-width="1.2"/><path d="M8 5v6M5 8h6" stroke="#73726c" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <span class="tip">Collect</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <span class="ptitle" id="ptitle">Analytics</span>
+      <div class="dbchip"><div class="pulsedot"></div>Ad Intelligence Final</div>
+      <div class="tr">
+        <div class="hpill"><div class="hmini"><div class="hfill"></div></div><span class="hpct">62%</span><span>health</span></div>
+        <button class="btn btnp" onclick="go('export',document.querySelectorAll('.ni')[4])">Export ↗</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ANALYTICS -->
+      <div id="v-analytics" class="view on">
+        <div class="krow">
+          <div class="kpi"><div class="kac" style="background:var(--accent)"></div><div class="kl">Total ads</div><div class="kv">65</div><div class="ks up">↑ +12 this week</div></div>
+          <div class="kpi"><div class="kac" style="background:var(--green)"></div><div class="kl">Export-ready</div><div class="kv" style="color:var(--green)">41</div><div class="ks">63% of dataset</div></div>
+          <div class="kpi"><div class="kac" style="background:var(--am)"></div><div class="kl">Avg score</div><div class="kv">7.2</div><div class="ks up">↑ +0.4 vs last batch</div></div>
+          <div class="kpi"><div class="kac" style="background:var(--red)"></div><div class="kl">Needs fixing</div><div class="kv" style="color:var(--red)">18</div><div class="ks dn">↓ blocking export</div></div>
+        </div>
+        <div class="card full"><div class="ct">Collection over time</div><div class="cs">Daily ads collected — last 14 days</div><div style="position:relative;width:100%;height:110px"><canvas id="tc" role="img" aria-label="Line chart daily collection">3–12 ads/day.</canvas></div></div>
+        <div class="two">
+          <div class="card">
+            <div class="ct">Hook performance</div><div class="cs">Avg score · count</div>
+            <div class="hrow"><span class="hl">Problem-first</span><div class="hbar"><div class="hbf" style="width:88%"></div></div><span class="hsc" style="color:var(--green)">8.8</span><span class="hct">21</span></div>
+            <div class="hrow"><span class="hl">Curiosity gap</span><div class="hbar"><div class="hbf" style="width:80%"></div></div><span class="hsc" style="color:var(--green)">8.0</span><span class="hct">16</span></div>
+            <div class="hrow"><span class="hl">Social proof</span><div class="hbar"><div class="hbf" style="width:72%"></div></div><span class="hsc" style="color:#633806">7.2</span><span class="hct">12</span></div>
+            <div class="hrow"><span class="hl">Direct offer</span><div class="hbar"><div class="hbf" style="width:60%;background:#B4B2A9"></div></div><span class="hsc" style="color:var(--text2)">6.0</span><span class="hct">10</span></div>
+            <div class="hrow"><span class="hl">Story open</span><div class="hbar"><div class="hbf" style="width:51%;background:#B4B2A9"></div></div><span class="hsc" style="color:var(--text2)">5.1</span><span class="hct">6</span></div>
+          </div>
+          <div class="card">
+            <div class="ct">Dataset health</div><div class="cs">Export readiness breakdown</div>
+            <div class="hring-wrap">
+              <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+                <svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="28" fill="none" stroke="#F1EFE8" stroke-width="9"/><circle cx="36" cy="36" r="28" fill="none" stroke="#27A06A" stroke-width="9" stroke-dasharray="113" stroke-dashoffset="0" transform="rotate(-90 36 36)"/><circle cx="36" cy="36" r="28" fill="none" stroke="#EF9F27" stroke-width="9" stroke-dasharray="176" stroke-dashoffset="113" transform="rotate(-90 36 36)"/><circle cx="36" cy="36" r="28" fill="none" stroke="#E24B4A" stroke-width="9" stroke-dasharray="193" stroke-dashoffset="176" transform="rotate(-90 36 36)"/><text x="36" y="33" text-anchor="middle" font-size="14" font-weight="500" fill="#27A06A" font-family="inherit">63%</text><text x="36" y="47" text-anchor="middle" font-size="9" fill="#888780" font-family="inherit">ready</text></svg>
+              </div>
+              <div style="flex:1">
+                <div class="hbrow"><span class="hbdot" style="background:#27A06A"></span><span class="hblbl">Ready</span><div class="hbbar"><div class="hbfill" style="width:63%;background:#27A06A"></div></div><span class="hbct">41</span></div>
+                <div class="hbrow"><span class="hbdot" style="background:#EF9F27"></span><span class="hblbl">Incomplete</span><div class="hbbar"><div class="hbfill" style="width:18%;background:#EF9F27"></div></div><span class="hbct">12</span></div>
+                <div class="hbrow"><span class="hbdot" style="background:#E24B4A"></span><span class="hblbl">Invalid</span><div class="hbbar"><div class="hbfill" style="width:9%;background:#E24B4A"></div></div><span class="hbct">6</span></div>
+                <div class="hbrow"><span class="hbdot" style="background:#B4B2A9"></span><span class="hblbl">Skipped</span><div class="hbbar"><div class="hbfill" style="width:9%;background:#B4B2A9"></div></div><span class="hbct">6</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="two">
+          <div class="card">
+            <div class="ct">Top ads</div><div class="cs">Highest scoring this batch</div>
+            <div class="trow"><span class="tidx">1</span><div class="tthumb" style="background:#EF9F2728;color:#c00"><div class="ptri"></div></div><div class="tinfo"><div class="tcopy">"What your doctor won't tell you..."</div><div class="tgrow"><span class="tag">YouTube</span><span class="tag taghk">Curiosity gap</span></div></div><span class="tscore">9.0</span></div>
+            <div class="trow"><span class="tidx">2</span><div class="tthumb" style="background:#1877F228;color:#1877F2"><div class="ptri"></div></div><div class="tinfo"><div class="tcopy">"Finally, a weight loss solution..."</div><div class="tgrow"><span class="tag">Meta</span><span class="tag taghk">Direct offer</span></div></div><span class="tscore">8.8</span></div>
+            <div class="trow"><span class="tidx">3</span><div class="tthumb" style="background:#1a1a2e28;color:#444"><div class="ptri"></div></div><div class="tinfo"><div class="tcopy">"POV: you discovered the secret..."</div><div class="tgrow"><span class="tag">TikTok</span><span class="tag taghk">Curiosity gap</span></div></div><span class="tscore">8.4</span></div>
+          </div>
+          <div class="card">
+            <div class="ct">Coverage gaps</div><div class="cs">Combinations to collect next</div>
+            <div class="gpwrap">
+              <span class="gp gpok">Problem-first · UGC</span>
+              <span class="gp gpok">Curiosity gap · Talking head</span>
+              <span class="gp gpwarn">Social proof · Slideshow · 3</span>
+              <span class="gp gpwarn">Story open · Demo · 2</span>
+              <span class="gp gperr">Direct offer · UGC · 0</span>
+              <span class="gp gperr">Story open · Talking head · 0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIBRARY -->
+      <div id="v-library" class="view">
+        <div class="ltb">
+          <div class="scopeg">
+            <button class="scbtn on" onclick="libScope('useful',this)">Useful</button>
+            <button class="scbtn" onclick="libScope('all',this)">+ Unreviewed</button>
+            <button class="scbtn" onclick="libScope('all',this)">All</button>
+          </div>
+          <div class="sep"></div>
+          <div class="fchip on" onclick="fc(this)">All platforms</div>
+          <div class="fchip" onclick="fc(this)">TikTok</div>
+          <div class="fchip" onclick="fc(this)">Meta</div>
+          <div class="fchip" onclick="fc(this)">YouTube</div>
+          <div class="sep"></div>
+          <div class="fchip on" onclick="fc(this)">All hooks</div>
+          <span class="ctlbl" id="lct">41 ads</span>
+          <div class="vbtns">
+            <button class="vbtn on" onclick="setLV('grid',this)">Grid</button>
+            <button class="vbtn" onclick="setLV('tbl',this)">Table</button>
+          </div>
+        </div>
+        <div id="luv" class="uvbar" style="display:none"><div class="wdot"></div><span>Showing <strong>24 unreviewed</strong> ads — not export-ready</span></div>
+        <div id="lgrid" class="adgrid"></div>
+        <div id="ltbl" style="display:none;overflow-x:auto">
+          <table class="vtbl"><thead><tr><th style="width:48px">Thumb</th><th style="width:68px">Platform</th><th>Copy</th><th style="width:95px">Hook</th><th style="width:70px">Format</th><th style="width:50px">Score</th></tr></thead><tbody id="ltbody"></tbody></table>
+        </div>
+      </div>
+
+      <!-- REVIEW -->
+      <div id="v-review" class="view">
+        <div class="rwrap">
+          <div class="rmain">
+            <div class="pgrow"><span class="pglbl">12 / 35 reviewed</span><div class="pgbar"><div class="pgfill"></div></div><span class="pglbl">23 remaining</span></div>
+            <div class="rcard">
+              <div class="rchead">
+                <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;background:#1a1a2e;color:#fff">TikTok</span>
+                <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;background:#E6F1FB;color:#0C447C">New</span>
+                <span style="font-size:11px;color:var(--text2);margin-left:auto">ad_00441</span>
+              </div>
+              <div class="rcbody">
+                <div><div class="flbl">Ad copy / transcript</div><div class="fval">"Stop wasting money on skincare that doesn't work. This dermatologist-approved serum changed everything for me in 14 days..."</div></div>
+                <div class="fgrid">
+                  <div><div class="flbl">Hook type <span style="color:var(--red);font-size:10px">required</span></div><select class="isel err"><option value="">— select —</option><option>Problem-first</option><option>Social proof</option><option>Curiosity gap</option><option>Direct offer</option><option>Story open</option></select></div>
+                  <div><div class="flbl">Format</div><select class="isel"><option>UGC</option><option>Talking head</option><option>Product demo</option><option>Slideshow</option></select></div>
+                </div>
+                <div><div class="flbl">Ad URL</div><div class="fval" style="font-size:11px;color:#378ADD">https://tiktok.com/ad/00441 ↗</div></div>
+              </div>
+            </div>
+            <div class="arow">
+              <button class="abtn abk"><span class="kbd">K</span>Keep</button>
+              <button class="abtn abs"><span class="kbd">S</span>Skip</button>
+              <button class="abtn abf"><span class="kbd">F</span>Flag</button>
+              <button class="abtn abd"><span class="kbd">D</span>Delete</button>
+            </div>
+            <div class="hintrow"><span>← → navigate</span><span>Tab cycle fields</span><span>Enter confirm</span></div>
+          </div>
+          <div class="rsidebar">
+            <div class="scard">
+              <div class="sctitle">Validation</div>
+              <div class="vi"><div class="vic viok">✓</div><span>Platform</span></div>
+              <div class="vi"><div class="vic viok">✓</div><span>Ad copy</span></div>
+              <div class="vi"><div class="vic vierr">!</div><span style="color:var(--red)">Hook — required</span></div>
+              <div class="vi"><div class="vic viok">✓</div><span>Format</span></div>
+              <div class="vi"><div class="vic viok">✓</div><span>Ad URL</span></div>
+              <div class="vi"><div class="vic viwarn">~</div><span style="color:#633806">Video URL — optional</span></div>
+            </div>
+            <div class="scard">
+              <div class="sctitle">Completeness</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="sring"><svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="22" fill="none" stroke="#F1EFE8" stroke-width="6"/><circle cx="30" cy="30" r="22" fill="none" stroke="#EF9F27" stroke-width="6" stroke-dasharray="88" stroke-dashoffset="32" transform="rotate(-90 30 30)"/></svg><div class="sinr"><div class="sbig">64%</div><div class="stny">complete</div></div></div>
+                <div style="flex:1;font-size:11px;display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;justify-content:space-between;color:var(--text2)"><span>Required</span><span style="color:var(--green);font-weight:500">5/6</span></div>
+                  <div style="display:flex;justify-content:space-between;color:var(--text2)"><span>Optional</span><span style="font-weight:500">1/3</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="scard">
+              <div class="sctitle">Session</div>
+              <div class="serow"><span>Kept</span><span style="color:var(--green);font-weight:500">7</span></div>
+              <div class="serow"><span>Skipped</span><span style="font-weight:500">3</span></div>
+              <div class="serow"><span>Flagged</span><span style="color:#633806;font-weight:500">2</span></div>
+              <div class="serow"><span>Deleted</span><span style="color:var(--red);font-weight:500">0</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VALIDATE -->
+      <div id="v-validate" class="view">
+        <div class="sumrow">
+          <div><div class="vsn" style="color:var(--green)">41</div><div class="vsl">export-ready</div></div>
+          <div style="width:1px;height:32px;background:var(--border)"></div>
+          <div><div class="vsn" style="color:var(--amber)">18</div><div class="vsl">incomplete</div></div>
+          <div style="width:1px;height:32px;background:var(--border)"></div>
+          <div><div class="vsn" style="color:var(--red)">6</div><div class="vsl">invalid</div></div>
+          <div style="margin-left:auto;font-size:12px;color:var(--text2)">Most common: <strong style="color:var(--text)">Missing hook (11 ads)</strong></div>
+          <button class="btn">Fix all hook types</button>
+        </div>
+        <div class="fstrip">
+          <div class="fchip on" onclick="fc(this)">All (65)</div>
+          <div class="fchip" onclick="fc(this)">Export-ready (41)</div>
+          <div class="fchip" onclick="fc(this)">Incomplete (18)</div>
+          <div class="fchip" onclick="fc(this)">Invalid (6)</div>
+          <div class="sep"></div>
+          <div class="fchip" onclick="fc(this)">Missing: hook</div>
+          <div class="fchip" onclick="fc(this)">Missing: format</div>
+        </div>
+        <table class="vtbl">
+          <thead><tr><th style="width:30px"><input type="checkbox"></th><th style="width:72px">ID</th><th style="width:66px">Platform</th><th>Copy</th><th style="width:100px">Hook</th><th style="width:65px">Format</th><th style="width:80px">Readiness</th><th style="width:48px">Fix</th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox"></td><td style="font-size:10px;color:var(--text2)">ad_00441</td><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1a1a2e;color:#fff;font-weight:500">TikTok</span></td><td style="font-size:11px;color:var(--text2)">"Stop wasting money..."</td><td><div class="miss"><div class="mdot"></div>missing</div></td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">UGC</span></td><td><span class="rbar"><span class="rbf" style="width:60%;background:#EF9F27"></span></span><span style="font-size:11px">60%</span></td><td><button class="fixbtn" onclick="go('review',document.querySelectorAll('.ni')[2])">Fix ↗</button></td></tr>
+            <tr><td><input type="checkbox"></td><td style="font-size:10px;color:var(--text2)">ad_00438</td><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1877F2;color:#fff;font-weight:500">Meta</span></td><td style="font-size:11px;color:var(--text2)">"The last diet you'll..."</td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">Problem-first</span></td><td><div class="miss"><div class="mdot"></div>missing</div></td><td><span class="rbar"><span class="rbf" style="width:70%;background:#EF9F27"></span></span><span style="font-size:11px">70%</span></td><td><button class="fixbtn" onclick="go('review',document.querySelectorAll('.ni')[2])">Fix ↗</button></td></tr>
+            <tr><td><input type="checkbox"></td><td style="font-size:10px;color:var(--text2)">ad_00435</td><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#cc0000;color:#fff;font-weight:500">YouTube</span></td><td style="font-size:11px;color:var(--text2)">"What your doctor..."</td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">Curiosity gap</span></td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">Talking head</span></td><td><span class="rbar"><span class="rbf" style="width:100%;background:#27A06A"></span></span><span style="font-size:11px;color:var(--green)">100%</span></td><td><span style="font-size:11px;color:var(--green)">Ready</span></td></tr>
+            <tr><td><input type="checkbox"></td><td style="font-size:10px;color:var(--text2)">ad_00431</td><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1a1a2e;color:#fff;font-weight:500">TikTok</span></td><td style="font-size:11px;color:var(--text2)">"I tried 12 supplements..."</td><td><div class="miss"><div class="mdot"></div>missing</div></td><td><div class="miss"><div class="mdot"></div>missing</div></td><td><span class="rbar"><span class="rbf" style="width:25%;background:#E24B4A"></span></span><span style="font-size:11px;color:var(--red)">25%</span></td><td><button class="fixbtn" onclick="go('review',document.querySelectorAll('.ni')[2])">Fix ↗</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- EXPORT -->
+      <div id="v-export" class="view">
+        <div class="explayout">
+          <div>
+            <div class="blknotice"><div class="bnic">!</div><div><strong>Export blocked.</strong> 6 records have errors. <span style="text-decoration:underline;cursor:pointer" onclick="go('validate',document.querySelectorAll('.ni')[3])">Fix in Validate →</span></div></div>
+            <div class="cpcard"><div class="cphead cpwarn">◑ Schema compliance</div><div class="cpbody"><div class="cprow"><span class="cpk">All required fields</span><span class="cpv cvwarn">41 / 65 (63%)</span></div><div class="cprow"><span class="cpk">Missing hook type</span><span class="cpv cverr">11 records</span></div><div class="cprow"><span class="cpk">Missing format</span><span class="cpv cverr">7 records</span></div><div class="cprow"><span class="cpk">Missing video URL</span><span class="cpv cvwarn">14 (optional)</span></div></div></div>
+            <div class="cpcard"><div class="cphead cperr">✕ Data integrity</div><div class="cpbody"><div class="cprow"><span class="cpk">Duplicate URLs</span><span class="cpv cverr">4 duplicates</span></div><div class="cprow"><span class="cpk">Broken URLs</span><span class="cpv cverr">2 records</span></div><div class="cprow"><span class="cpk">Non-standard values</span><span class="cpv cvok">None</span></div></div></div>
+            <div class="cpcard"><div class="cphead cpok">✓ Scope</div><div class="cpbody"><div class="cprow"><span class="cpk">Total records</span><span class="cpv">65</span></div><div class="cprow"><span class="cpk">Export-ready</span><span class="cpv cvok">41</span></div><div class="cprow"><span class="cpk">Date range</span><span class="cpv">May 1–3, 2026</span></div></div></div>
+            <div style="margin-bottom:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--text)">Format</div><div class="fmtrow"><div class="fmtopt sel">CSV</div><div class="fmtopt">XLSX</div><div class="fmtopt">JSON</div></div></div>
+            <button class="expbtnm">Export dataset — resolve issues first</button>
+            <button class="expbtns">Export ready-only (41 ads)</button>
+          </div>
+          <div>
+            <div class="donutwrap">
+              <div style="font-size:11px;font-weight:500;color:var(--text2);align-self:flex-start;margin-bottom:10px">Dataset health</div>
+              <svg width="90" height="90" viewBox="0 0 90 90"><circle cx="45" cy="45" r="36" fill="none" stroke="#F1EFE8" stroke-width="9"/><circle cx="45" cy="45" r="36" fill="none" stroke="#27A06A" stroke-width="9" stroke-dasharray="143" stroke-dashoffset="0" transform="rotate(-90 45 45)"/><circle cx="45" cy="45" r="36" fill="none" stroke="#EF9F27" stroke-width="9" stroke-dasharray="166" stroke-dashoffset="143" transform="rotate(-90 45 45)"/><circle cx="45" cy="45" r="36" fill="none" stroke="#E24B4A" stroke-width="9" stroke-dasharray="226" stroke-dashoffset="203" transform="rotate(-90 45 45)"/><text x="45" y="42" text-anchor="middle" font-size="16" font-weight="500" fill="#27A06A" font-family="inherit">62%</text><text x="45" y="55" text-anchor="middle" font-size="10" fill="#888780" font-family="inherit">health</text></svg>
+              <div style="display:flex;gap:12px;font-size:11px;margin-top:10px">
+                <span style="display:flex;align-items:center;gap:4px;color:var(--text2)"><span style="width:7px;height:7px;border-radius:50%;background:#27A06A;display:inline-block"></span>Ready</span>
+                <span style="display:flex;align-items:center;gap:4px;color:var(--text2)"><span style="width:7px;height:7px;border-radius:50%;background:#EF9F27;display:inline-block"></span>Partial</span>
+                <span style="display:flex;align-items:center;gap:4px;color:var(--text2)"><span style="width:7px;height:7px;border-radius:50%;background:#E24B4A;display:inline-block"></span>Invalid</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ct" style="margin-bottom:10px">Dataset stats</div>
+              <div class="dsrow"><span class="dsk">Total ads</span><span class="dsv">65</span></div>
+              <div class="dsrow"><span class="dsk">Platforms</span><span class="dsv">3</span></div>
+              <div class="dsrow"><span class="dsk">Hook types</span><span class="dsv">5/5</span></div>
+              <div class="dsrow"><span class="dsk">Avg score</span><span class="dsv">7.2</span></div>
+              <div class="dsrow"><span class="dsk">Duplicates</span><span class="dsv" style="color:var(--red)">4</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLLECT -->
+      <div id="v-collect" class="view">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:0;padding-bottom:0">
+          <div class="modetog">
+            <button class="mtbtn on" onclick="setMode('fast',this)">⚡ Fast</button>
+            <button class="mtbtn" onclick="setMode('reg',this)">Regular</button>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn" onclick="setCtab('history')">Job history</button>
+            <button class="btn" onclick="setCtab('import')">Manual import</button>
+          </div>
+        </div>
+        <div class="stabs" style="margin-top:12px">
+          <div class="stab on" id="stab-scrape" onclick="setCtab('scrape')">Configure scrape</div>
+          <div class="stab" id="stab-history" onclick="setCtab('history')">Job history <span class="badge jbrun" style="margin-left:4px">1 running</span></div>
+          <div class="stab" id="stab-import" onclick="setCtab('import')">Manual import</div>
+          <div class="stab" id="stab-tagging" onclick="setCtab('tagging')">AI tagging <span class="badge" style="background:var(--al);color:var(--ad);margin-left:4px">18 untagged</span></div>
+        </div>
+
+        <!-- SCRAPE PANE -->
+        <div id="cpane-scrape" class="spane on" style="padding-top:14px">
+          <!-- FAST -->
+          <div id="cmode-fast" style="display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:8px">Describe your scrape — AI infers platform, keywords, filters, and count</div>
+              <div class="fsbox">
+                <div class="fsinner">
+                  <div class="aiicon"><div class="aispark"><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="#fff"/></svg></div></div>
+                  <textarea id="fastinp" class="fsta" placeholder="e.g. &quot;Find 50 TikTok UGC ads about skincare for Gen Z&quot; or &quot;Get Meta ads in the supplement space with social proof hooks&quot;" oninput="infer(this.value)" rows="2"></textarea>
+                  <button class="fsrun" onclick="setCtab('history')">⚡ Run scrape</button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:7px">Try an example</div>
+              <div class="exwrap">
+                <span class="expill" onclick="fillEx(this)">"50 TikTok UGC skincare ads targeting Gen Z"</span>
+                <span class="expill" onclick="fillEx(this)">"Meta supplement ads using social proof hooks"</span>
+                <span class="expill" onclick="fillEx(this)">"YouTube fitness ads, curiosity gap, last 30 days"</span>
+                <span class="expill" onclick="fillEx(this)">"100 DTC ads all platforms, problem-first hook"</span>
+              </div>
+            </div>
+            <div class="infcard" id="infcard">
+              <div class="infhd">
+                <div class="aispark" style="width:18px;height:18px;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="#fff"/></svg></div>
+                <span style="font-size:12px;font-weight:500;color:var(--ad)">AI inferred parameters — review before running</span>
+              </div>
+              <div class="infgrid" id="infgrid"></div>
+              <div class="infacts">
+                <button class="btn btnp" onclick="setCtab('history')">Run with these parameters</button>
+                <button class="btn" onclick="setMode('reg',document.querySelectorAll('.mtbtn')[1])">Edit in regular mode</button>
+                <span class="infnote">Not right? Switch to regular mode</span>
+              </div>
+            </div>
+          </div>
+          <!-- REGULAR -->
+          <div id="cmode-reg" style="display:none">
+            <div class="two" style="margin-bottom:12px">
+              <div>
+                <div class="ct">Platform</div>
+                <div class="platgrid">
+                  <div class="platcard sel" onclick="tp(this)"><div class="platicon" style="background:#1a1a2e">TT</div><div class="platname">TikTok</div><div class="platsub">Creative Centre</div><div class="platchk on"></div></div>
+                  <div class="platcard" onclick="tp(this)"><div class="platicon" style="background:#1877F2">M</div><div class="platname">Meta</div><div class="platsub">Ad Library</div><div class="platchk"></div></div>
+                  <div class="platcard" onclick="tp(this)"><div class="platicon" style="background:#cc0000">YT</div><div class="platname">YouTube</div><div class="platsub">Shorts</div><div class="platchk"></div></div>
+                </div>
+              </div>
+              <div>
+                <div class="ct">Keywords & target</div>
+                <div class="field"><div class="flbl2">Keywords <span class="fhint">— press Enter</span></div><div class="tagwrap" onclick="document.getElementById('kwi').focus()"><span class="kwtag">skincare<span class="kwx" onclick="event.stopPropagation();this.parentElement.remove()">×</span></span><span class="kwtag">DTC<span class="kwx" onclick="event.stopPropagation();this.parentElement.remove()">×</span></span><input id="kwi" class="taginp" placeholder="Add keyword..." onkeydown="addkw(event,this)"></div></div>
+                <div class="field" style="margin-bottom:0"><div class="flbl2">Niche</div><select class="sel"><option>Beauty & Skincare</option><option>Health & Wellness</option><option>Fitness</option><option>DTC / E-commerce</option><option>Finance</option><option>SaaS / Tech</option></select></div>
+              </div>
+            </div>
+            <div class="two" style="margin-bottom:12px">
+              <div class="card">
+                <div class="ct">Scrape parameters</div>
+                <div class="field"><div class="flbl2">Max ads</div><div class="rrow"><input type="range" min="10" max="500" step="10" value="100" oninput="document.getElementById('rv1').textContent=this.value"><span class="rval" id="rv1">100</span></div></div>
+                <div class="field"><div class="flbl2">Min duration (s)</div><div class="rrow"><input type="range" min="5" max="120" step="5" value="15" oninput="document.getElementById('rv2').textContent=this.value+'s'"><span class="rval" id="rv2">15s</span></div></div>
+                <div class="field" style="margin-bottom:0"><div class="flbl2">Date range</div><div style="display:flex;gap:8px"><input class="inp" type="date" value="2026-04-01" style="flex:1"><input class="inp" type="date" value="2026-05-03" style="flex:1"></div></div>
+              </div>
+              <div class="card">
+                <div class="ct">Filters & AI options</div>
+                <div class="field"><div class="flbl2">Format</div><select class="sel"><option>All formats</option><option>UGC only</option><option>Talking head</option><option>Product demo</option><option>Slideshow</option></select></div>
+                <div class="field"><div class="flbl2">Language</div><select class="sel"><option>English</option><option>Spanish</option><option>French</option><option>Any</option></select></div>
+                <div class="field" style="margin-bottom:0"><div class="flbl2">Options</div>
+                  <div class="chkrow"><input type="checkbox" checked><label>Skip duplicates on collect</label></div>
+                  <div class="chkrow"><input type="checkbox" checked><label>Validate schema on collect</label></div>
+                  <div class="chkrow"><input type="checkbox" checked><label><span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#6C3FB5,#5B4FD9);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="8" height="8" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="#fff"/></svg></span>Auto-tag hook + format with AI</span></label></div>
+                </div>
+              </div>
+            </div>
+            <div class="runpanel">
+              <div class="runsum">
+                <div class="rsitem"><span class="rsval">TikTok</span><span>Platform</span></div>
+                <div class="rsitem"><span class="rsval">skincare, DTC</span><span>Keywords</span></div>
+                <div class="rsitem"><span class="rsval">100 ads</span><span>Target</span></div>
+                <div class="rsitem"><span class="rsval">Beauty & Skincare</span><span>Niche</span></div>
+                <div class="rsitem"><span class="rsval">Apr 1 – May 3</span><span>Date range</span></div>
+                <div class="rsitem"><span class="rsval" style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#6C3FB5,#5B4FD9);display:inline-block"></span>AI tagging on</span><span>Hook + format</span></div>
+              </div>
+              <div class="runacts">
+                <button class="btn btnp" onclick="setCtab('history')">Run scrape</button>
+                <button class="btn">Save as preset</button>
+                <button class="btn">Schedule recurring</button>
+                <span class="runnote">Est. ~4 min · 100 ads max</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HISTORY PANE -->
+        <div id="cpane-history" class="spane" style="padding-top:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:12px;color:var(--text2)">6 jobs · last 7 days</span><select class="sel" style="width:auto;font-size:11px;padding:5px 8px"><option>All platforms</option><option>TikTok</option><option>Meta</option><option>YouTube</option></select></div>
+          <div class="joblist">
+            <div class="jobrow"><div class="jsdot jsrun"></div><div class="jinfo"><div class="jtitle">TikTok · skincare, DTC · <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:500;background:var(--al);color:var(--ad);padding:1px 5px;border-radius:3px"><svg width="7" height="7" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="var(--accent)"/></svg>AI tagging on</span></div><div class="jmeta">Started 8 min ago · Ad Intelligence Final</div><div class="jpb"><div class="jpbf" style="width:38%"></div></div></div><span class="jbadge jbrun">Running 38%</span><div class="jct">38 <span style="font-size:11px;font-weight:400;color:var(--text2)">/ 100</span></div><button class="btn btnd" style="font-size:11px;padding:4px 10px">Stop</button></div>
+            <div class="jobrow"><div class="jsdot jsdone"></div><div class="jinfo"><div class="jtitle">Meta · weight loss · Health & Wellness · <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:500;background:var(--al);color:var(--ad);padding:1px 5px;border-radius:3px"><svg width="7" height="7" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="var(--accent)"/></svg>AI tagged</span></div><div class="jmeta">Completed 2h ago · 48 ads · 46 auto-tagged · 4 deduped</div></div><span class="jbadge jbdone">Done</span><div class="jct">48 <span style="font-size:11px;font-weight:400;color:var(--text2)">ads</span></div><button class="btn" style="font-size:11px;padding:4px 10px">Re-run</button></div>
+            <div class="jobrow"><div class="jsdot jsfail"></div><div class="jinfo"><div class="jtitle">TikTok · beauty · Fast scrape</div><div class="jmeta">Failed 1d ago · Apify rate limit exceeded</div></div><span class="jbadge jbfail">Failed</span><div class="jct">0 <span style="font-size:11px;font-weight:400;color:var(--text2)">ads</span></div><button class="btn" style="font-size:11px;padding:4px 10px">Retry</button></div>
+          </div>
+        </div>
+
+        <!-- IMPORT PANE -->
+        <div id="cpane-import" class="spane" style="padding-top:14px">
+          <div class="two">
+            <div>
+              <div class="ct" style="margin-bottom:10px">Upload file</div>
+              <div class="dropzone"><div style="width:34px;height:34px;border-radius:9px;background:var(--al);display:flex;align-items:center;justify-content:center;margin:0 auto 10px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 11V3m0 0L5 6m3-3l3 3" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12h12" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/></svg></div><div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px">Drop JSON or CSV here</div><div style="font-size:11px;color:var(--text2)">or click to browse · max 10MB</div></div>
+              <div class="card" style="padding:12px"><div style="font-size:11px;font-weight:500;color:var(--text);margin-bottom:8px">Required fields</div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text2)"><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0"></span><code style="font-size:10px;background:var(--bg3);padding:1px 5px;border-radius:3px">platform</code> TikTok · Meta · YouTube</div><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0"></span><code style="font-size:10px;background:var(--bg3);padding:1px 5px;border-radius:3px">ad_url</code> unique, valid URL</div><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0"></span><code style="font-size:10px;background:var(--bg3);padding:1px 5px;border-radius:3px">ad_copy</code> min 10 characters</div><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#B4B2A9;flex-shrink:0"></span><code style="font-size:10px;background:var(--bg3);padding:1px 5px;border-radius:3px">hook</code> optional — AI can infer</div><div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#B4B2A9;flex-shrink:0"></span><code style="font-size:10px;background:var(--bg3);padding:1px 5px;border-radius:3px">format</code> optional — AI can infer</div></div></div>
+            </div>
+            <div>
+              <div class="ct" style="margin-bottom:10px">Paste JSON</div>
+              <textarea class="inp" style="min-height:100px;resize:vertical;font-family:monospace;font-size:11px;width:100%;margin-bottom:10px" placeholder='[{"platform":"TikTok","ad_url":"...","ad_copy":"..."}]'></textarea>
+              <div class="field"><div class="flbl2">Destination</div><select class="sel"><option>Ad Intelligence Final (active)</option><option>Test / Sandbox</option></select></div>
+              <div class="chkrow" style="margin-bottom:10px"><input type="checkbox" checked><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)"><span style="width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#6C3FB5,#5B4FD9);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="8" height="8" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="#fff"/></svg></span>Auto-tag missing hook + format with AI</label></div>
+              <div style="display:flex;gap:8px"><button class="btn" style="flex:1">Validate JSON</button><button class="btn btnp" style="flex:1">Import to DB</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI TAGGING PANE -->
+        <div id="cpane-tagging" class="spane" style="padding-top:14px">
+          <div class="aibanner">
+            <div class="aibicon"><svg width="16" height="16" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L6.5 4.5H10L7.5 6.5 8.5 10 5.5 8 2.5 10 3.5 6.5 1 4.5H4.5L5.5 1Z" fill="#fff"/></svg></div>
+            <div style="flex:1"><div class="aibtitle">18 ads missing hook or format — AI can tag them automatically</div><div class="aibsub">AI reads ad copy and infers hook + format from your controlled vocabulary. Review and confirm before saving.</div></div>
+            <div class="aibacts"><button class="btn">Review one by one</button><button class="btn btnp" onclick="tagAll()">⚡ Tag all 18 with AI</button></div>
+          </div>
+          <div class="libmini">
+            <div class="lmhead"><span style="font-weight:500;color:var(--text)">Untagged ads</span><span style="font-size:10px;color:var(--text2);margin-left:4px">— hook or format missing</span><span style="margin-left:auto;font-size:11px;color:var(--text2)" id="tagct">18 remaining</span></div>
+            <table class="ltbl">
+              <thead><tr><th style="width:65px">Platform</th><th>Ad copy</th><th style="width:110px">Hook</th><th style="width:90px">Format</th><th style="width:70px">Action</th></tr></thead>
+              <tbody id="tagtbody">
+                <tr><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1a1a2e;color:#fff;font-weight:500">TikTok</span></td><td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">"Stop wasting money on skincare..."</td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">UGC</span></td><td><button class="aitag" onclick="tagRow(this,'Problem-first',null)">Tag with AI</button></td></tr>
+                <tr><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1877F2;color:#fff;font-weight:500">Meta</span></td><td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">"The last diet you'll ever need..."</td><td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">Problem-first</span></td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><button class="aitag" onclick="tagRow(this,null,'Talking head')">Tag with AI</button></td></tr>
+                <tr><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#1877F2;color:#fff;font-weight:500">Meta</span></td><td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">"Doctors hate this simple trick..."</td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><button class="aitag" onclick="tagRow(this,'Curiosity gap','Slideshow')">Tag with AI</button></td></tr>
+                <tr><td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#cc0000;color:#fff;font-weight:500">YouTube</span></td><td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">"I tried 12 supplements before..."</td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><div class="misst"><div class="mdot"></div>missing</div></td><td><button class="aitag" onclick="tagRow(this,'Social proof','Talking head')">Tag with AI</button></td></tr>
+                <tr><td colspan="5" style="padding:10px;text-align:center;font-size:11px;color:var(--text2)">14 more untagged ads — <span style="color:var(--accent);cursor:pointer;text-decoration:underline">show all</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;padding:12px 14px;background:var(--bg3);border-radius:10px;font-size:11px;color:var(--text2);line-height:1.8"><span style="font-weight:500;color:var(--text)">How AI tagging works:</span> The AI reads each ad's copy and infers the most likely hook type and format from your controlled vocabulary. Confidence is shown per tag — low-confidence tags are flagged for manual review. Tags are never saved automatically without confirmation.</div>
+        </div>
+
+      </div><!-- end collect view -->
+
+    </div><!-- end content -->
+
+    <div id="collect-footer" class="footbar" style="display:none">
+      <div class="pulsedot"></div><span>Active DB: <strong style="color:var(--text)">Ad Intelligence Final</strong></span>
+      <div class="ftstats"><span>Today: <strong style="color:var(--text)">60 collected</strong></span><span>Dedup blocked: <strong style="color:var(--green)">4</strong></span><span>Schema rejected: <strong style="color:var(--red)">2</strong></span><span>1 job running</span></div>
+    </div>
+  </div><!-- end main -->
+</div><!-- end app -->
+
+<script>
+// DATA
+const ADS=[
+  {p:'YouTube',copy:'"What your doctor won\'t tell you about this supplement..."',hook:'Curiosity gap',fmt:'Talking head',score:9.0,status:'useful',c:'#cc0000'},
+  {p:'Meta',copy:'"Finally, a weight loss solution that actually works..."',hook:'Direct offer',fmt:'Slideshow',score:8.8,status:'useful',c:'#1877F2'},
+  {p:'TikTok',copy:'"POV: you discovered the secret skincare routine..."',hook:'Curiosity gap',fmt:'UGC',score:8.4,status:'useful',c:'#1a1a2e'},
+  {p:'Meta',copy:'"The last diet you\'ll ever need. Here\'s why..."',hook:'Problem-first',fmt:'Talking head',score:8.1,status:'useful',c:'#1877F2'},
+  {p:'YouTube',copy:'"This 3-step routine fixed my skin in one week..."',hook:'Social proof',fmt:'UGC',score:7.8,status:'useful',c:'#cc0000'},
+  {p:'TikTok',copy:'"Stop wasting money on skincare that doesn\'t work..."',hook:'Problem-first',fmt:'UGC',score:7.2,status:'useful',c:'#1a1a2e'},
+  {p:'TikTok',copy:'"I tried 12 supplements before finding this one..."',hook:'Social proof',fmt:'UGC',score:6.2,status:'new',c:'#1a1a2e'},
+  {p:'Meta',copy:'"Doctors hate this simple trick to losing belly fat..."',hook:'Curiosity gap',fmt:'Slideshow',score:null,status:'new',c:'#1877F2'},
+];
+
+const TITLES={analytics:'Analytics',library:'Library',review:'Review',validate:'Validate',export:'Export',collect:'Collect'};
+
+// NAV
+function go(id,navEl){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
+  document.getElementById('v-'+id).classList.add('on');
+  if(navEl)navEl.classList.add('on');
+  document.getElementById('ptitle').textContent=TITLES[id]||id;
+  document.getElementById('collect-footer').style.display=id==='collect'?'flex':'none';
+}
+
+// LIBRARY
+function renderLib(ads){
+  document.getElementById('lgrid').innerHTML=ads.map(a=>`
+    <div class="acard">
+      <div class="thumb" style="background:${a.c}18">
+        <div class="tplay"><div class="ptri" style="border-left-color:${a.c};opacity:.8"></div></div>
+        <span class="ppip" style="background:${a.c};color:#fff">${a.p}</span>
+        <span class="spip">${a.score?a.score.toFixed(1):'—'}</span>
+      </div>
+      <div class="abody">
+        <span class="ahktag">${a.hook}</span>
+        <div class="acopy">${a.copy}</div>
+        <div class="afoot"><span class="fmttag">${a.fmt}</span><div class="sdot ${a.status==='useful'?'sdg':'sdb'}"></div></div>
+      </div>
+    </div>`).join('');
+  document.getElementById('ltbody').innerHTML=ads.map(a=>`
+    <tr>
+      <td><div style="width:26px;height:38px;border-radius:4px;background:${a.c}18;display:flex;align-items:center;justify-content:center"><div class="ptri" style="border-left-color:${a.c};opacity:.7"></div></div></td>
+      <td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${a.c};color:#fff;font-weight:500">${a.p}</span></td>
+      <td style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${a.copy}</td>
+      <td><span style="font-size:11px;background:var(--al);color:var(--ad);padding:2px 6px;border-radius:4px">${a.hook}</span></td>
+      <td style="font-size:11px;color:var(--text2)">${a.fmt}</td>
+      <td style="font-size:13px;font-weight:500;color:${a.score>=8?'#27A06A':a.score>=6?'#633806':'#888'}">
+        ${a.score?a.score.toFixed(1):'—'}
+      </td>
+    </tr>`).join('');
+  document.getElementById('lct').textContent=ads.length+' ads';
+}
+renderLib(ADS.filter(a=>a.status==='useful'));
+
+function libScope(s,btn){
+  document.querySelectorAll('.scbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const uv=document.getElementById('luv');
+  if(s==='all'){uv.style.display='flex';renderLib(ADS);}
+  else{uv.style.display='none';renderLib(ADS.filter(a=>a.status==='useful'));}
+}
+function fc(el){
+  const siblings=[...el.parentElement.children].filter(c=>c.classList.contains('fchip'));
+  if(siblings.length>0){siblings.forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+}
+function setLV(m,btn){
+  document.querySelectorAll('.vbtn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+  document.getElementById('lgrid').style.display=m==='grid'?'grid':'none';
+  document.getElementById('ltbl').style.display=m==='tbl'?'block':'none';
+}
+
+// COLLECT
+function setCtab(id){
+  document.querySelectorAll('.spane').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('cpane-'+id).classList.add('on');
+  document.getElementById('stab-'+id).classList.add('on');
+}
+function setMode(m,btn){
+  document.querySelectorAll('.mtbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('cmode-fast').style.display=m==='fast'?'flex':'none';
+  if(m==='fast')document.getElementById('cmode-fast').style.flexDirection='column';
+  document.getElementById('cmode-reg').style.display=m==='reg'?'block':'none';
+}
+const EX={
+  "50 TikTok UGC skincare ads targeting Gen Z":{Platform:'TikTok',Keywords:'skincare, Gen Z',Niche:'Beauty & Skincare',Count:'50',Format:'UGC',Date:'Last 30 days'},
+  "Meta supplement ads using social proof hooks":{Platform:'Meta',Keywords:'supplement, vitamins',Niche:'Health & Wellness',Count:'100',Hook:'Social proof',Date:'Last 60 days'},
+  "YouTube fitness ads, curiosity gap, last 30 days":{Platform:'YouTube',Keywords:'fitness, workout',Niche:'Fitness',Count:'100',Hook:'Curiosity gap',Date:'Last 30 days'},
+  "100 DTC ads all platforms, problem-first hook":{Platform:'All platforms',Keywords:'DTC, ecommerce',Niche:'DTC / E-commerce',Count:'100',Hook:'Problem-first',Date:'Last 90 days'},
+};
+function fillEx(el){
+  const t=el.textContent.replace(/"/g,'');
+  document.getElementById('fastinp').value='"'+t+'"';
+  infer(t);
+}
+function infer(val){
+  const card=document.getElementById('infcard');
+  const grid=document.getElementById('infgrid');
+  if(!val||val.length<8){card.classList.remove('show');return;}
+  const key=Object.keys(EX).find(k=>val.toLowerCase().includes(k.toLowerCase().slice(0,12)));
+  const data=key?EX[key]:{Platform:'TikTok',Keywords:val.split(' ').slice(0,3).join(', '),Niche:'Beauty & Skincare',Count:'100',Format:'All',Date:'Last 30 days'};
+  grid.innerHTML=Object.entries(data).map(([k,v])=>`<div class="infitem"><div class="inflbl">${k}</div><div class="infval">${v}</div></div>`).join('');
+  card.classList.add('show');
+}
+function tp(card){card.classList.toggle('sel');card.querySelector('.platchk').classList.toggle('on')}
+function addkw(e,inp){
+  if(e.key!=='Enter')return;
+  const v=inp.value.trim();if(!v)return;
+  const t=document.createElement('span');t.className='kwtag';
+  t.innerHTML=v+'<span class="kwx" onclick="event.stopPropagation();this.parentElement.remove()">×</span>';
+  inp.parentElement.insertBefore(t,inp);inp.value='';
+}
+
+// AI TAGGING
+function tagRow(btn,hook,fmt){
+  const row=btn.closest('tr');
+  const cells=[...row.querySelectorAll('td')];
+  if(hook)cells[2].innerHTML=`<div class="aitagd"><div class="aidot"></div>${hook}</div>`;
+  if(fmt)cells[3].innerHTML=`<div class="aitagd"><div class="aidot"></div>${fmt}</div>`;
+  cells[4].innerHTML=`<span style="font-size:11px;color:var(--green);font-weight:500">✓ Tagged</span>`;
+  const ct=document.getElementById('tagct');
+  ct.textContent=(parseInt(ct.textContent)-1)+' remaining';
+}
+function tagAll(){
+  document.querySelectorAll('#tagtbody tr td:nth-child(3)').forEach(td=>{if(td.querySelector('.misst'))td.innerHTML=`<div class="aitagd"><div class="aidot"></div>AI tagged</div>`;});
+  document.querySelectorAll('#tagtbody tr td:nth-child(4)').forEach(td=>{if(td.querySelector('.misst'))td.innerHTML=`<div class="aitagd"><div class="aidot"></div>AI tagged</div>`;});
+  document.querySelectorAll('#tagtbody tr td:nth-child(5)').forEach(td=>{if(td.querySelector('.aitag'))td.innerHTML=`<span style="font-size:11px;color:var(--green);font-weight:500">✓ Tagged</span>`;});
+  document.getElementById('tagct').textContent='0 remaining';
+}
+
+// CHART
+new Chart(document.getElementById('tc'),{
+  type:'line',
+  data:{labels:['20','21','22','23','24','25','26','27','28','29','30','1','2','3'],datasets:[{data:[4,7,3,9,12,5,8,6,4,10,7,11,8,6],borderColor:'#5B4FD9',backgroundColor:'#5B4FD914',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#5B4FD9',borderWidth:1.5}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},color:'#888780',maxRotation:0},grid:{display:false},border:{display:false}},y:{ticks:{font:{size:10},color:'#888780',stepSize:4},beginAtZero:true,max:14,grid:{color:'#88878014'},border:{display:false}}}}
+});
+</script>
+</body>
+</html>
