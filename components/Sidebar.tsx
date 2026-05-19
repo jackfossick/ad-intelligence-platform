@@ -1,144 +1,138 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useDb } from "@/lib/db-context";
 
-const NAV = [
-  { href: "/collect",  icon: "⊕", label: "Collect",       group: "main"   },
-  { href: "/library",  icon: "⊞", label: "Library",        group: "main"   },
-  { href: "/review",   icon: "✎", label: "Review",         group: "main"   },
-  { href: "/validate", icon: "✓", label: "Validate",       group: "main"   },
-  { href: "/insights", icon: "◈", label: "Key Insights",   group: "main"   },
-  { href: "/export",   icon: "↓", label: "Export",         group: "main"   },
-  { href: "/jobs",     icon: "≡", label: "Job Log",        group: "system" },
-  { href: "/settings", icon: "⚙", label: "Settings",       group: "system" },
-  { href: "/databases",icon: "◫", label: "Databases",      group: "system" },
+// ── Design tokens (mirror docs/design.html) ───────────────────
+const T = {
+  accent: "#5B4FD9", al: "#EEEDFE",
+  bg2: "#fff", bg3: "#f1efe8",
+  text: "#1a1a18", text2: "#73726c",
+  border: "#e8e6df",
+} as const;
+
+// Match icon order from docs/design.html: Analytics, Library, Review,
+// divider, Validate, Export, divider, Collect-at-bottom.
+const NAV: { href: string; label: string; icon: React.ReactElement; group: "top" | "mid" | "bot" }[] = [
+  { href: "/insights", label: "Analytics", group: "top", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1"  y="9" width="3" height="6"  rx="1" stroke="currentColor" strokeWidth="1.2"/>
+      <rect x="6"  y="5" width="3" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+      <rect x="11" y="2" width="3" height="13" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  ) },
+  { href: "/library", label: "Library", group: "top", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  ) },
+  { href: "/review", label: "Review", group: "top", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ) },
+  { href: "/validate", label: "Validate", group: "mid", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1L10 5h4l-3 3 1 4-4-2-4 2 1-4L2 5h4L8 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ) },
+  { href: "/export", label: "Export", group: "mid", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M8 10V2m0 8l-3-3m3 3l3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2 12h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ) },
+  { href: "/collect", label: "Collect", group: "bot", icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ) },
 ];
 
-const GROUPS = [
-  { key: "main",   label: "" },
-  { key: "system", label: "System" },
-];
+const SIDEBAR_W = 52;
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { databases, activeDb, setActiveDbId, loading } = useDb();
+
+  const top = NAV.filter((n) => n.group === "top");
+  const mid = NAV.filter((n) => n.group === "mid");
+  const bot = NAV.filter((n) => n.group === "bot");
 
   return (
     <nav style={{
-      position: "fixed", left: 0, top: 0, bottom: 0, width: 220,
-      background: "var(--color-background-primary)",
-      borderRight: "1px solid var(--color-border-tertiary)",
-      display: "flex", flexDirection: "column", zIndex: 100,
-      boxShadow: "1px 0 0 var(--color-border-tertiary)",
+      position: "fixed", left: 0, top: 0, bottom: 0, width: SIDEBAR_W,
+      background: T.bg2,
+      borderRight: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "14px 0", gap: 4, zIndex: 100,
     }}>
-
-      {/* ── Logo ───────────────────────────────────────────────── */}
-      <div style={{ padding: "18px 18px 16px", borderBottom: "1px solid var(--color-border-tertiary)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: "linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, color: "white", fontWeight: 700, flexShrink: 0,
-            boxShadow: "0 2px 6px rgba(59,130,246,0.30)",
-          }}>A</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", letterSpacing: "0.01em" }}>
-              Ad Intelligence
-            </div>
-            <div style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 1 }}>
-              Collection system
-            </div>
-          </div>
-        </div>
+      {/* Logo */}
+      <div style={{
+        width: 28, height: 28, borderRadius: 8, background: T.accent,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 12, flexShrink: 0,
+      }}>
+        <div style={{ width: 12, height: 12, borderRadius: 3, background: "#fff", opacity: 0.9 }} />
       </div>
 
-      {/* ── Nav ────────────────────────────────────────────────── */}
-      <div style={{ padding: "12px 0", flex: 1, overflowY: "auto" }}>
-        {GROUPS.map(({ key, label }) => {
-          const items = NAV.filter((n) => n.group === key);
-          return (
-            <div key={key} style={{ marginBottom: 4 }}>
-              {label && (
-                <div style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: "0.10em",
-                  textTransform: "uppercase", color: "var(--color-text-tertiary)",
-                  padding: "6px 18px 4px",
-                }}>
-                  {label}
-                </div>
-              )}
-              {items.map(({ href, icon, label: itemLabel }) => {
-                const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 9,
-                      padding: "7px 14px 7px 16px", margin: "1px 8px",
-                      borderRadius: "var(--border-radius-md)", fontSize: 13,
-                      color: active ? "var(--color-accent-dark)" : "var(--color-text-secondary)",
-                      background: active ? "var(--color-accent-light)" : "transparent",
-                      fontWeight: active ? 500 : 400,
-                      textDecoration: "none", transition: "background 0.1s, color 0.1s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!active) (e.currentTarget as HTMLElement).style.background = "var(--color-background-secondary)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 13, width: 18, textAlign: "center", flexShrink: 0,
-                      color: active ? "var(--color-accent)" : "var(--color-text-tertiary)",
-                    }}>
-                      {icon}
-                    </span>
-                    {itemLabel}
-                  </Link>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Database switcher ───────────────────────────────────── */}
-      <div style={{ padding: "12px 14px", borderTop: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)" }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "var(--color-text-tertiary)", marginBottom: 6 }}>
-          Active Database
-        </div>
-        {loading ? (
-          <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Loading…</div>
-        ) : (
-          <select
-            value={activeDb?.id ?? ""}
-            onChange={(e) => setActiveDbId(e.target.value)}
-            style={{
-              width: "100%", fontSize: 12, padding: "6px 8px",
-              borderRadius: "var(--border-radius-md)",
-              background: "var(--color-background-primary)",
-              border: "1px solid var(--color-border-secondary)",
-              color: "var(--color-text-primary)", fontWeight: 500,
-              boxShadow: "var(--shadow-xs)",
-            }}
-          >
-            {databases.map((db) => (
-              <option key={db.id} value={db.id}>{db.name}</option>
-            ))}
-          </select>
-        )}
-        {activeDb && (
-          <div style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 5, display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16A34A", display: "inline-block" }} />
-            {activeDb.adCount} ads collected
-          </div>
-        )}
+      {top.map((n) => <NavItem key={n.href} {...n} active={isActive(pathname, n.href)} />)}
+      <Divider />
+      {mid.map((n) => <NavItem key={n.href} {...n} active={isActive(pathname, n.href)} />)}
+      <Divider />
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+        {bot.map((n) => <NavItem key={n.href} {...n} active={isActive(pathname, n.href)} />)}
       </div>
     </nav>
   );
 }
+
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/insights") return pathname === "/insights" || pathname.startsWith("/insights/");
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+function NavItem({ href, label, icon, active }: { href: string; label: string; icon: React.ReactElement; active: boolean }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      style={{
+        width: 36, height: 36, borderRadius: 10,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative", cursor: "pointer",
+        background: active ? T.al : hover ? T.bg3 : "transparent",
+        color: active ? T.accent : T.text2,
+        textDecoration: "none",
+        transition: "background 0.15s",
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {icon}
+      {hover && <span style={tipStyle()}>{label}</span>}
+    </Link>
+  );
+}
+
+function Divider() {
+  return <div style={{ width: 20, height: 1, background: T.border, margin: "6px 0", flexShrink: 0 }} />;
+}
+
+function tipStyle(): React.CSSProperties {
+  return {
+    position: "absolute", left: 46, top: "50%", transform: "translateY(-50%)",
+    background: T.bg2, border: "1px solid #d3d1c7", borderRadius: 6,
+    padding: "4px 9px", fontSize: 11, whiteSpace: "nowrap", color: T.text,
+    zIndex: 200, pointerEvents: "none",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  };
+}
+
+export const SIDEBAR_WIDTH = SIDEBAR_W;
