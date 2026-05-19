@@ -48,7 +48,7 @@ const SOURCE_CONFIG: Record<string, { label: string; color: string; bg: string }
   apify:        { label: "Apify",  color: "#1D64D8", bg: "#EEF4FF" },
   claude_chrome:{ label: "Chrome", color: "#6B21A8", bg: "#F3E8FF" },
   csv:          { label: "CSV",    color: "#065F46", bg: "#ECFDF5" },
-  manual:       { label: "Manual", color: "#92400E", bg: "#FEF3C7" },
+  manual:       { label: "Manual", color: "#633806", bg: "#FEF3DA" },
 };
 function SourceBadge({ source }: { source?: unknown }) {
   if (!source) return null;
@@ -63,8 +63,8 @@ function SourceBadge({ source }: { source?: unknown }) {
 // ── Tagging badge ─────────────────────────────────────────────
 const TAGGING_CONFIG: Record<string, { label: string; color: string }> = {
   untagged:    { label: "Untagged",  color: "#9CA3AF" },
-  ai_tagged:   { label: "AI Tagged", color: "#16A34A" },
-  ai_tagging:  { label: "Tagging…",  color: "#D97706" },
+  ai_tagged:   { label: "AI Tagged", color: "#27A06A" },
+  ai_tagging:  { label: "Tagging…",  color: "#D4870A" },
 };
 function TaggingBadge({ status }: { status?: unknown }) {
   if (!status || status === "untagged") return null;
@@ -74,9 +74,9 @@ function TaggingBadge({ status }: { status?: unknown }) {
 
 // ── Usefulness badge ──────────────────────────────────────────
 const USEFULNESS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  useful:     { label: "✓ Useful",     color: "#166534", bg: "#DCFCE7" },
-  not_useful: { label: "✗ Not useful", color: "#991B1B", bg: "#FEE2E2" },
-  uncertain:  { label: "? Uncertain",  color: "#92400E", bg: "#FEF3C7" },
+  useful:     { label: "✓ Useful",     color: "#085041", bg: "#E1F5EE" },
+  not_useful: { label: "✗ Not useful", color: "#7A1F1F", bg: "#FEECEC" },
+  uncertain:  { label: "? Uncertain",  color: "#633806", bg: "#FEF3DA" },
 };
 function UsefulnessBadge({ status, confidence }: { status?: unknown; confidence?: unknown }) {
   if (!status) return null;
@@ -93,11 +93,11 @@ function UsefulnessBadge({ status, confidence }: { status?: unknown; confidence?
 
 // ── Review status ─────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  new:        { label: "New",      color: "#92400E", bg: "#FEF3C7" },
-  unreviewed: { label: "New",      color: "#92400E", bg: "#FEF3C7" },
-  reviewed:   { label: "Reviewed", color: "#1E40AF", bg: "#DBEAFE" },
-  useful:     { label: "✓ Useful", color: "#166534", bg: "#DCFCE7" },
-  rejected:   { label: "✗ Skipped", color: "#991B1B", bg: "#FEE2E2" },
+  new:        { label: "New",      color: "#633806", bg: "#FEF3DA" },
+  unreviewed: { label: "New",      color: "#633806", bg: "#FEF3DA" },
+  reviewed:   { label: "Reviewed", color: "#0C447C", bg: "#E6F1FB" },
+  useful:     { label: "✓ Useful", color: "#085041", bg: "#E1F5EE" },
+  rejected:   { label: "✗ Skipped", color: "#7A1F1F", bg: "#FEECEC" },
 };
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status?.toLowerCase()] ?? STATUS_CONFIG.new;
@@ -137,11 +137,11 @@ function QuickStatus({ ad, onUpdate }: { ad: Ad; onUpdate: (id: string, status: 
       ) : (
         <div style={{ display: "flex", gap: 3 }}>
           <button onClick={() => setStatus("useful")} disabled={saving}
-            style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, border: "1px solid #16A34A", color: "#16A34A", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+            style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, border: "1px solid #27A06A", color: "#27A06A", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
             ✓
           </button>
           <button onClick={() => setStatus("rejected")} disabled={saving}
-            style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, border: "1px solid #DC2626", color: "#DC2626", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+            style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, border: "1px solid #D14040", color: "#D14040", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
             ✗
           </button>
         </div>
@@ -154,8 +154,8 @@ function QuickStatus({ ad, onUpdate }: { ad: Ad; onUpdate: (id: string, status: 
 function ScorePill({ value, label, size = "sm" }: { value: unknown; label: string; size?: "sm" | "lg" }) {
   const n = Number(value);
   if (isNaN(n) || value === null || value === undefined || value === "") return null;
-  const color = n >= 7 ? "#166534" : n >= 5 ? "#92400E" : "#991B1B";
-  const bg    = n >= 7 ? "#DCFCE7" : n >= 5 ? "#FEF3C7" : "#FEE2E2";
+  const color = n >= 7 ? "#085041" : n >= 5 ? "#633806" : "#7A1F1F";
+  const bg    = n >= 7 ? "#E1F5EE" : n >= 5 ? "#FEF3DA" : "#FEECEC";
   return (
     <span title={label} style={{ fontSize: size === "lg" ? 13 : 10, fontWeight: 700, padding: size === "lg" ? "3px 8px" : "1px 5px", borderRadius: 8, color, background: bg, whiteSpace: "nowrap" }}>
       {n.toFixed(1)}
@@ -417,7 +417,7 @@ function DetailedCard({
               </div>
             )}
             {!!ad.organicOrPaid && (
-              <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 6, background: String(ad.organicOrPaid) === "paid" ? "#DBEAFE" : "#ECFDF5", color: String(ad.organicOrPaid) === "paid" ? "#1E40AF" : "#166534", fontWeight: 600, textTransform: "uppercase" }}>
+              <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 6, background: String(ad.organicOrPaid) === "paid" ? "#E6F1FB" : "#ECFDF5", color: String(ad.organicOrPaid) === "paid" ? "#0C447C" : "#085041", fontWeight: 600, textTransform: "uppercase" }}>
                 {String(ad.organicOrPaid)}
               </span>
             )}
@@ -512,13 +512,13 @@ function DetailedCard({
         {/* Status actions */}
         {status !== "useful" && (
           <button onClick={() => setStatus("useful")} disabled={saving}
-            style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #16A34A", color: "#16A34A", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+            style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #27A06A", color: "#27A06A", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
             ✓ Keep
           </button>
         )}
         {status !== "rejected" && (
           <button onClick={() => setStatus("rejected")} disabled={saving}
-            style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #D97706", color: "#D97706", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+            style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #D4870A", color: "#D4870A", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
             ✗ Skip
           </button>
         )}
@@ -531,7 +531,7 @@ function DetailedCard({
         <button
           onClick={handleDelete}
           disabled={deleting}
-          style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #DC2626", color: "#DC2626", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", marginLeft: "auto", whiteSpace: "nowrap" }}>
+          style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #D14040", color: "#D14040", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", marginLeft: "auto", whiteSpace: "nowrap" }}>
           {deleting ? "Deleting…" : "🗑 Delete"}
         </button>
       </div>
@@ -857,16 +857,16 @@ export default function LibraryPage() {
           <>
             <span style={{ fontSize: 12, color: "var(--color-accent)", fontWeight: 500 }}>
               {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}` : "Starting…"}
-              {bulkProgress && bulkProgress.failed > 0 && <span style={{ color: "#DC2626", marginLeft: 6 }}>{bulkProgress.failed} failed</span>}
+              {bulkProgress && bulkProgress.failed > 0 && <span style={{ color: "#D14040", marginLeft: 6 }}>{bulkProgress.failed} failed</span>}
             </span>
             <div style={{ flex: 1, height: 4, background: "var(--color-border-tertiary)", borderRadius: 2, minWidth: 80 }}>
               {bulkProgress && <div style={{ height: "100%", borderRadius: 2, background: "var(--color-accent)", width: `${Math.round((bulkProgress.done / bulkProgress.total) * 100)}%`, transition: "width 0.3s" }} />}
             </div>
-            <button onClick={() => { bulkAbortRef.current = true; }} className="btn btn-sm" style={{ fontSize: 11, color: "#DC2626" }}>Stop</button>
+            <button onClick={() => { bulkAbortRef.current = true; }} className="btn btn-sm" style={{ fontSize: 11, color: "#D14040" }}>Stop</button>
           </>
         )}
         {toDeleteAds.length > 0 && !bulkTagging && (
-          <button onClick={() => setConfirmDelete(true)} className="btn btn-sm" style={{ fontSize: 11, color: "#991B1B", borderColor: "#DC2626", marginLeft: "auto" }}>
+          <button onClick={() => setConfirmDelete(true)} className="btn btn-sm" style={{ fontSize: 11, color: "#7A1F1F", borderColor: "#D14040", marginLeft: "auto" }}>
             🗑 Delete all {toDeleteAds.length} flagged
           </button>
         )}
@@ -899,7 +899,7 @@ export default function LibraryPage() {
           <button
             type="button" className="btn btn-sm" onClick={handleBulkMarkDelete}
             disabled={!!bulkActing}
-            style={{ fontSize: 11, color: "#854F0B", borderColor: "#EF9F27" }}
+            style={{ fontSize: 11, color: "#633806", borderColor: "#D4870A" }}
           >
             {bulkActing === "mark_delete" ? "Marking…" : "⚑ Mark delete"}
           </button>
@@ -907,7 +907,7 @@ export default function LibraryPage() {
           <button
             type="button" className="btn btn-sm" onClick={handleBulkHardDelete}
             disabled={!!bulkActing}
-            style={{ fontSize: 11, color: "#991B1B", borderColor: "#DC2626" }}
+            style={{ fontSize: 11, color: "#7A1F1F", borderColor: "#D14040" }}
           >
             {bulkActing === "hard_delete" ? "Deleting…" : "🗑 Delete"}
           </button>
@@ -923,9 +923,9 @@ export default function LibraryPage() {
       {bulkActionMsg && (
         <div style={{
           marginBottom: 12, padding: "6px 12px", borderRadius: 6, fontSize: 12,
-          background: bulkActionMsg.toLowerCase().includes("failed") ? "#FCEBEB" : "#EAF3DE",
-          color: bulkActionMsg.toLowerCase().includes("failed") ? "#791F1F" : "#27500A",
-          border: `1px solid ${bulkActionMsg.toLowerCase().includes("failed") ? "#F7C1C1" : "#C0DD97"}`,
+          background: bulkActionMsg.toLowerCase().includes("failed") ? "#FEECEC" : "#E1F5EE",
+          color: bulkActionMsg.toLowerCase().includes("failed") ? "#7A1F1F" : "#085041",
+          border: `1px solid ${bulkActionMsg.toLowerCase().includes("failed") ? "#F7C1C1" : "#9FE1CB"}`,
           display: "flex", alignItems: "center", gap: 8,
         }}>
           <span>{bulkActionMsg}</span>
@@ -948,7 +948,7 @@ export default function LibraryPage() {
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button className="btn btn-sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-              <button className="btn btn-sm" style={{ background: "#DC2626", color: "white", border: "none" }} onClick={handleBulkDeleteConfirm} disabled={deleting}>
+              <button className="btn btn-sm" style={{ background: "#D14040", color: "white", border: "none" }} onClick={handleBulkDeleteConfirm} disabled={deleting}>
                 {deleting ? "Deleting…" : "Delete all"}
               </button>
             </div>
@@ -1182,7 +1182,7 @@ function DeleteBtn({ adId, onDeleted }: { adId: string; onDeleted: (id: string) 
   };
   return (
     <button onClick={handleDelete} disabled={deleting} title="Delete ad"
-      style={{ fontSize: 13, padding: "2px 6px", borderRadius: 6, border: "1px solid #FCA5A5", color: "#DC2626", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+      style={{ fontSize: 13, padding: "2px 6px", borderRadius: 6, border: "1px solid #FCA5A5", color: "#D14040", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
       {deleting ? "…" : "🗑"}
     </button>
   );

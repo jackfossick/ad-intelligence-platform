@@ -67,9 +67,9 @@ body {
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
 }
-.score-high  { background: #DCFCE7; color: #166534; }
-.score-mid   { background: #FEF3C7; color: #92400E; }
-.score-low   { background: #FEE2E2; color: #991B1B; }
+.score-high  { background: #E1F5EE; color: #085041; }
+.score-mid   { background: #FEF3DA; color: #633806; }
+.score-low   { background: #FEECEC; color: #7A1F1F; }
 .score-none  { background: var(--color-background-secondary); color: var(--color-text-tertiary); }
 
 /* ── Platform badges ─────────────────────────────────────────── */
@@ -91,11 +91,11 @@ body {
 .badge-meta      { background: #EEF4FF; color: #1A56DB; }
 .badge-pinterest { background: #FFF0EC; color: #BF4A20; }
 .badge-snapchat  { background: #FFFBEB; color: #92600A; }
-.badge-blue      { background: #EEF4FF; color: #1A56DB; }
-.badge-green     { background: #ECFDF5; color: #065F46; }
-.badge-amber     { background: #FFFBEB; color: #92600A; }
-.badge-gray      { background: var(--color-background-secondary); color: var(--color-text-secondary); }
-.badge-purple    { background: #F5F3FF; color: #5B21B6; }
+.badge-blue      { background: #E6F1FB; color: #0C447C; }
+.badge-green     { background: #E1F5EE; color: #085041; }
+.badge-amber     { background: #FEF3DA; color: #633806; }
+.badge-gray      { background: var(--color-background-tertiary); color: var(--color-text-secondary); }
+.badge-purple    { background: var(--color-accent-light); color: var(--color-accent-dark); }
 .badge-coral     { background: #FFF0EC; color: #BF4A20; }
 
 /* ── Chip ────────────────────────────────────────────────────── */

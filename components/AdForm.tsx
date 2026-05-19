@@ -288,7 +288,7 @@ export default function AdForm({
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16, padding: "10px 14px", background: "#FCEBEB", border: "0.5px solid #A32D2D", borderRadius: "var(--border-radius-md)", color: "#A32D2D", fontSize: 13 }}>
+        <div style={{ marginBottom: 16, padding: "10px 14px", background: "#FEECEC", border: "0.5px solid #7A1F1F", borderRadius: "var(--border-radius-md)", color: "#7A1F1F", fontSize: 13 }}>
           {error}
         </div>
       )}

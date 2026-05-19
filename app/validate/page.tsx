@@ -23,9 +23,9 @@ function readiness(row: RowValidationResult): number {
 }
 
 function readinessClass(pct: number): { bar: string; text: string } {
-  if (pct >= 95) return { bar: "#639922", text: "#3B6D11" };
-  if (pct >= 60) return { bar: "#EF9F27", text: "#854F0B" };
-  return { bar: "#E24B4A", text: "#A32D2D" };
+  if (pct >= 95) return { bar: "#27A06A", text: "#085041" };
+  if (pct >= 60) return { bar: "#D4870A", text: "#633806" };
+  return { bar: "#D14040", text: "#7A1F1F" };
 }
 
 function bucketOf(r: RowValidationResult): Bucket {
@@ -105,11 +105,11 @@ export default function ValidatePage() {
           display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
           marginBottom: 12, flexWrap: "wrap",
         }}>
-          <SumStat n={ready}      color="#3B6D11" label="export-ready" />
+          <SumStat n={ready}      color="#085041" label="export-ready" />
           <Sep />
-          <SumStat n={incomplete} color="#854F0B" label="incomplete" />
+          <SumStat n={incomplete} color="#633806" label="incomplete" />
           <Sep />
-          <SumStat n={invalid}    color="#A32D2D" label="invalid" />
+          <SumStat n={invalid}    color="#7A1F1F" label="invalid" />
           <Sep />
           <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
             Most common issue: <strong style={{ color: "var(--color-text-primary)" }}>
@@ -137,7 +137,7 @@ export default function ValidatePage() {
       )}
 
       {error && (
-        <div className="card" style={{ padding: 12, marginBottom: 12, background: "#FCEBEB", color: "#791F1F", fontSize: 13 }}>
+        <div className="card" style={{ padding: 12, marginBottom: 12, background: "#FEECEC", color: "#7A1F1F", fontSize: 13 }}>
           {error}
         </div>
       )}
@@ -210,7 +210,7 @@ export default function ValidatePage() {
                       </td>
                       <td style={{ padding: "8px 10px" }}>
                         {r.row.creative_video_url
-                          ? <span style={{ fontSize: 11, color: "#3B6D11" }}>✓</span>
+                          ? <span style={{ fontSize: 11, color: "#085041" }}>✓</span>
                           : <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>—</span>}
                       </td>
                       <td style={{ padding: "8px 10px" }}>
@@ -236,7 +236,7 @@ export default function ValidatePage() {
                             Fix ↗
                           </Link>
                         ) : (
-                          <span style={{ fontSize: 11, color: "#3B6D11" }}>Ready</span>
+                          <span style={{ fontSize: 11, color: "#085041" }}>Ready</span>
                         )}
                       </td>
                     </tr>
@@ -309,8 +309,8 @@ function Th({ children, width }: { children: React.ReactNode; width?: number }) 
 function ValueOrMissing({ val, missing, kind }: { val: string; missing: boolean; kind: "tag" | "badge" }) {
   if (!val || missing) {
     return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "#A32D2D" }}>
-        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#E24B4A" }} />
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "#7A1F1F" }}>
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#D14040" }} />
         missing
       </span>
     );

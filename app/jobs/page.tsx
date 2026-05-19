@@ -121,7 +121,7 @@ export default function JobsPage() {
           { label: "Imported", value: summary.imported, tone: "var(--color-text-primary)" },
           { label: "Deduped",  value: summary.deduped,  tone: "var(--color-text-secondary)" },
           { label: "Skipped",  value: summary.skipped,  tone: "var(--color-text-secondary)" },
-          { label: "Failed",   value: summary.failed,   tone: summary.failed ? "#BF4A20" : "var(--color-text-tertiary)" },
+          { label: "Failed",   value: summary.failed,   tone: summary.failed ? "#D14040" : "var(--color-text-tertiary)" },
           { label: "Scraped",  value: summary.scraped,  tone: "var(--color-text-primary)" },
         ].map((s) => (
           <div key={s.label} className="card" style={{ padding: "10px 14px" }}>
@@ -207,7 +207,7 @@ export default function JobsPage() {
                       <td style={{ color: "var(--color-text-secondary)" }}>{j.keyword || "—"}</td>
                       <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, textAlign: "right" }}>{num(j.imported)}</td>
                       <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, textAlign: "right", color: "var(--color-text-tertiary)" }}>{num(j.deduped)}</td>
-                      <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, textAlign: "right", color: (j.failed ?? 0) > 0 ? "#BF4A20" : "var(--color-text-tertiary)" }}>{num(j.failed)}</td>
+                      <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, textAlign: "right", color: (j.failed ?? 0) > 0 ? "#D14040" : "var(--color-text-tertiary)" }}>{num(j.failed)}</td>
                       <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, textAlign: "right" }}>{num(total)}</td>
                       <td style={{ fontSize: 11, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
                         {new Date(j.createdAt).toLocaleString()}
