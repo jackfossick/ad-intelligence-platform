@@ -1,34 +1,37 @@
 @import "tailwindcss";
 
-/* ── Design tokens ───────────────────────────────────────────── */
+/* ── Design tokens — aligned with docs/design.html ───────────── */
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", "Fira Code", "Roboto Mono", monospace;
 
-  --color-background-primary:   #FFFFFF;
-  --color-background-secondary: #F7F8FA;
-  --color-background-tertiary:  #F0F1F5;
+  /* Off-white canvas + paper-white surfaces */
+  --color-background-primary:   #FFFFFF;   /* card surface (bg2) */
+  --color-background-secondary: #F8F8F6;   /* page canvas (bg)   */
+  --color-background-tertiary:  #F1EFE8;   /* subtle fill (bg3)  */
 
-  --color-text-primary:   #0F1117;
-  --color-text-secondary: #4E525E;
-  --color-text-tertiary:  #939AAA;
+  --color-text-primary:   #1A1A18;
+  --color-text-secondary: #73726C;
+  --color-text-tertiary:  #9C9A92;
 
-  --color-border-primary:   #C4C7CF;
-  --color-border-secondary: #D6D9E0;
-  --color-border-tertiary:  #E8EAEF;
+  --color-border-primary:   #C4C2BA;
+  --color-border-secondary: #D3D1C7;
+  --color-border-tertiary:  #E8E6DF;
 
-  --color-accent:       #3B82F6;
-  --color-accent-dark:  #1D64D8;
-  --color-accent-light: #EEF4FF;
+  /* Purple accent per design (was a blue) */
+  --color-accent:       #5B4FD9;
+  --color-accent-dark:  #26215C;
+  --color-accent-light: #EEEDFE;
 
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05);
 
-  --border-radius-sm: 5px;
-  --border-radius-md: 7px;
-  --border-radius-lg: 11px;
+  /* Match design's --radius:8px / --radius-lg:12px and a 16px outer */
+  --border-radius-sm: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
   --border-radius-xl: 16px;
 }
 
@@ -39,7 +42,7 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   color: var(--color-text-primary);
-  background: var(--color-background-tertiary);
+  background: var(--color-background-secondary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
