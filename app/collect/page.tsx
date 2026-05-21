@@ -143,6 +143,8 @@ function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) 
 function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: () => void }) {
   const [text, setText] = useState("");
   const inferred = useMemo(() => inferFromText(text), [text]);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -192,21 +194,35 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             <InfRow label="Format"    value={inferred.format ?? "any"} />
             <InfRow label="Date range" value={inferred.dateRange ?? "last 30 days"} />
           </div>
+          {error && (
+            <div style={{
+              padding: "8px 10px", marginBottom: 8, borderRadius: 6,
+              background: T.rl, color: T.rd, fontSize: 11, fontFamily: "var(--font-mono)",
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>{error}</div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={async () => {
                 if (!inferred.platform || !inferred.keywords.length) return;
-                await runScrape({
-                  platformId: inferred.platform,
-                  keywords:   inferred.keywords,
-                  maxResults: inferred.maxResults,
-                });
-                onLaunched();
+                setRunning(true); setError(null);
+                try {
+                  await runScrape({
+                    platformId: inferred.platform,
+                    keywords:   inferred.keywords,
+                    maxResults: inferred.maxResults,
+                  });
+                  onLaunched();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Failed to start scrape.");
+                } finally {
+                  setRunning(false);
+                }
               }}
-              disabled={!inferred.platform || !inferred.keywords.length}
-              style={btnStyle({ primary: true, disabled: !inferred.platform || !inferred.keywords.length })}
+              disabled={running || !inferred.platform || !inferred.keywords.length}
+              style={btnStyle({ primary: true, disabled: running || !inferred.platform || !inferred.keywords.length })}
             >
-              Run with these parameters
+              {running ? "Starting…" : "Run with these parameters"}
             </button>
             <button onClick={onSwitchToRegular} style={btnStyle({})}>Edit in regular mode</button>
             <span style={{ fontSize: 11, color: T.text2, marginLeft: "auto" }}>Not right? Switch to regular mode</span>
@@ -864,12 +880,15 @@ function inferFromText(text: string): {
   dateRange: string | null;
 } {
   const t = text.toLowerCase();
+  // Default to TikTok when no platform is explicitly mentioned. Without a
+  // default the "Run" button stays silently disabled for any natural-language
+  // query that doesn't name a platform, which reads as "Fast mode is broken".
   const platform =
     /tiktok/.test(t) ? "TikTok" :
     /instagram|insta\b|\big\b/.test(t) ? "Instagram" :
     /meta|facebook/.test(t) ? "Meta" :
     /youtube|yt/.test(t) ? "YouTube" :
-    null;
+    "TikTok";
   const numMatch = t.match(/\b(\d{1,4})\b/);
   const maxResults = numMatch ? Math.max(10, Math.min(500, Number(numMatch[1]))) : 100;
   const hook =
