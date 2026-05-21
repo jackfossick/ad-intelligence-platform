@@ -5,70 +5,66 @@ import { useDb } from "@/lib/db-context";
 
 type ScrapedItem = Record<string, unknown>;
 
-// ── Actor presets ──────────────────────────────────────────────
-const ACTORS = [
+// ── Platform presets (Bright Data Datasets API) ─────────────────
+const PLATFORMS = [
   {
-    id: "apify/facebook-ads-scraper",
+    id: "Meta",
     label: "Meta Ad Library",
     platform: "Meta",
     description: "Scrapes Facebook / Instagram Ad Library. Requires keyword.",
     color: "#185FA5",
   },
   {
-    id: "clockworks/tiktok-scraper",
+    id: "TikTok",
     label: "TikTok Creative Center",
     platform: "TikTok",
     description: "Scrapes TikTok top ads by keyword.",
     color: "#993C1D",
   },
   {
-    id: "apify/instagram-scraper",
+    id: "Instagram",
     label: "Instagram",
     platform: "Instagram",
     description: "Scrapes Instagram posts by hashtag or keyword.",
     color: "#534AB7",
   },
-];
+] as const;
 
 const COUNTRIES = ["US", "AU", "GB", "CA", "NZ", "SG"];
 
-// ── Field mapper: Apify result → our schema ────────────────────
-function mapItem(item: ScrapedItem, actor: string): Record<string, unknown> {
+// ── Field mapper: Bright Data result → our schema ──────────────
+function mapItem(item: ScrapedItem, platform: string): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const get = (path: string): unknown => path.split(".").reduce((o: any, k) => o?.[k], item);
 
-  if (actor.includes("facebook")) {
-    const snap = get("snapshot") as Record<string, unknown> | undefined;
-    const vids = (snap?.videos as Array<Record<string, unknown>>) ?? [];
+  if (platform === "Meta") {
     return {
       platform: "Meta",
-      referenceUrl: String(get("adArchiveID") ? `https://www.facebook.com/ads/library/?id=${get("adArchiveID")}` : get("url") ?? ""),
-      adLink: (vids[0]?.video_hd_url || vids[0]?.video_sd_url || null) as string | null,
-      brandOrCreator: String(get("pageName") ?? ""),
+      referenceUrl: String(get("ad_library_url") ?? get("url") ?? ""),
+      adLink: (get("video_url") ?? get("creative_video_url") ?? null) as string | null,
+      brandOrCreator: String(get("page_name") ?? get("advertiser_name") ?? ""),
       primaryCategory: "Uncategorised",
       reviewStatus: "unreviewed",
       extraFields: JSON.stringify({ raw: JSON.stringify(item).slice(0, 500) }),
     };
   }
-  if (actor.includes("tiktok")) {
-    const meta = get("videoMeta") as Record<string, unknown> | undefined;
-    const author = get("authorMeta") as Record<string, unknown> | undefined;
+  if (platform === "TikTok") {
     return {
       platform: "TikTok",
-      adLink: String(meta?.downloadAddr || get("videoUrl") || ""),
-      referenceUrl: String(get("webVideoUrl") ?? ""),
-      brandOrCreator: String(author?.name || get("author") || ""),
-      hookExample: String(get("text") ?? ""),
+      adLink: String(get("video_url") ?? get("download_url") ?? ""),
+      referenceUrl: String(get("url") ?? get("post_url") ?? ""),
+      brandOrCreator: String(get("author_name") ?? get("username") ?? ""),
+      hookExample: String(get("caption") ?? get("description") ?? ""),
       primaryCategory: "Uncategorised",
       reviewStatus: "unreviewed",
     };
   }
-  if (actor.includes("instagram")) {
+  if (platform === "Instagram") {
     return {
       platform: "Instagram",
-      adLink: String(get("videoUrl") ?? ""),
-      referenceUrl: String(get("url") ?? ""),
-      brandOrCreator: String(get("ownerUsername") ?? ""),
+      adLink: String(get("video_url") ?? ""),
+      referenceUrl: String(get("post_url") ?? get("url") ?? ""),
+      brandOrCreator: String(get("username") ?? get("owner_username") ?? ""),
       hookExample: String(get("caption") ?? "").slice(0, 200),
       primaryCategory: "Uncategorised",
       reviewStatus: "unreviewed",
@@ -79,20 +75,21 @@ function mapItem(item: ScrapedItem, actor: string): Record<string, unknown> {
 
 // ── Status badge ───────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    RUNNING: "badge-blue",
-    SUCCEEDED: "badge-green",
-    FAILED: "badge-coral",
-    ABORTED: "badge-gray",
-  };
-  return <span className={`badge ${map[status] || "badge-gray"}`}>{status}</span>;
+  const s = status.toLowerCase();
+  const cls =
+    s === "running" ? "badge-blue" :
+    s === "ready" || s === "succeeded" ? "badge-green" :
+    s === "failed" ? "badge-coral" :
+    s === "canceled" || s === "aborted" ? "badge-gray" :
+    "badge-gray";
+  return <span className={`badge ${cls}`}>{status}</span>;
 }
 
 // ── Discover page ──────────────────────────────────────────────
 export default function DiscoverPage() {
   const { activeDb, databases } = useDb();
 
-  const [actor,      setActor]      = useState(ACTORS[0].id);
+  const [platform,   setPlatform]   = useState<string>(PLATFORMS[0].id);
   const [keyword,    setKeyword]    = useState("");
   const [maxResults, setMaxResults] = useState("20");
   const [country,    setCountry]    = useState("US");
@@ -116,21 +113,21 @@ export default function DiscoverPage() {
 
   const startScrape = async () => {
     if (!keyword.trim()) { setError("Enter a keyword first."); return; }
-    setError(null); setRunning(true); setStatus("STARTING");
+    setError(null); setRunning(true); setStatus("starting");
     setItems([]); setSaved(0); setRunId(null);
 
     try {
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor, keyword, maxResults: parseInt(maxResults), country }),
+        body: JSON.stringify({ platform, keyword, maxResults: parseInt(maxResults), country }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start run");
 
       const id = data.runId as string;
       setRunId(id);
-      setStatus("RUNNING");
+      setStatus("running");
 
       // Poll every 5 seconds
       pollRef.current = setInterval(async () => {
@@ -144,7 +141,7 @@ export default function DiscoverPage() {
           if (pollData.succeeded) {
             setItems(pollData.items ?? []);
           } else {
-            setError(`Run ${pollData.status.toLowerCase()}.`);
+            setError(`Run ${String(pollData.status).toLowerCase()}.`);
           }
         }
       }, 5000);
@@ -165,7 +162,7 @@ export default function DiscoverPage() {
     setSaving(true);
     let count = 0;
     for (const item of items) {
-      const payload = { ...mapItem(item, actor), databaseId: effectiveDb };
+      const payload = { ...mapItem(item, platform), databaseId: effectiveDb };
       await fetch("/api/ads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,7 +174,7 @@ export default function DiscoverPage() {
     setSaving(false);
   };
 
-  const selectedActor = ACTORS.find((a) => a.id === actor) ?? ACTORS[0];
+  const selectedPlatform = PLATFORMS.find((p) => p.id === platform) ?? PLATFORMS[0];
 
   // Preview columns to show (first 5 keys that have values)
   const previewCols = items.length > 0
@@ -190,7 +187,7 @@ export default function DiscoverPage() {
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 18, fontWeight: 500 }}>Discover</h2>
         <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
-          Scrape ads from Meta, TikTok, and Instagram via Apify. Requires <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>APIFY_TOKEN</code> in your .env file.
+          Scrape ads from Meta, TikTok, and Instagram via Bright Data. Requires <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>BRIGHT_DATA_API_KEY</code> in your .env file.
         </p>
       </div>
 
@@ -198,25 +195,25 @@ export default function DiscoverPage() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">Scrape settings</div>
 
-        {/* Actor selector */}
+        {/* Platform selector */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          {ACTORS.map((a) => (
+          {PLATFORMS.map((p) => (
             <button
-              key={a.id}
-              onClick={() => setActor(a.id)}
+              key={p.id}
+              onClick={() => setPlatform(p.id)}
               className="btn btn-sm"
               style={{
-                borderColor: actor === a.id ? a.color : undefined,
-                background: actor === a.id ? `${a.color}18` : undefined,
-                color: actor === a.id ? a.color : undefined,
+                borderColor: platform === p.id ? p.color : undefined,
+                background: platform === p.id ? `${p.color}18` : undefined,
+                color: platform === p.id ? p.color : undefined,
               }}
             >
-              {a.label}
+              {p.label}
             </button>
           ))}
         </div>
         <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 16 }}>
-          {selectedActor.description}
+          {selectedPlatform.description}
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 20px" }}>
@@ -347,15 +344,16 @@ export default function DiscoverPage() {
       <div className="card" style={{ marginTop: 24 }}>
         <div className="card-title">Setup</div>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
-          Add your Apify token to <code style={{ fontFamily: "var(--font-mono)", fontSize: 11, background: "var(--color-background-secondary)", padding: "1px 4px", borderRadius: 3 }}>.env.local</code>:
+          Add your Bright Data API key + dataset IDs to <code style={{ fontFamily: "var(--font-mono)", fontSize: 11, background: "var(--color-background-secondary)", padding: "1px 4px", borderRadius: 3 }}>.env.local</code>:
         </p>
-        <div style={{ background: "#111318", borderRadius: "var(--border-radius-md)", padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#7EB8F7" }}>
-          APIFY_TOKEN=your_apify_token_here
-        </div>
+        <div style={{ background: "#111318", borderRadius: "var(--border-radius-md)", padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#7EB8F7", whiteSpace: "pre", overflowX: "auto" }}>{`BRIGHT_DATA_API_KEY=your_api_key_here
+BRIGHT_DATA_DATASET_TIKTOK=gd_xxxxxxxxxxxxxxxx
+BRIGHT_DATA_DATASET_META=gd_xxxxxxxxxxxxxxxx
+BRIGHT_DATA_DATASET_INSTAGRAM=gd_xxxxxxxxxxxxxxxx`}</div>
         <p style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 8 }}>
-          Get your token at{" "}
-          <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }}>
-            console.apify.com
+          Get your key + dataset IDs at{" "}
+          <a href="https://brightdata.com/cp/datasets/marketplace" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }}>
+            brightdata.com
           </a>
         </p>
       </div>

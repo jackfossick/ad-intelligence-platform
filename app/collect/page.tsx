@@ -15,9 +15,9 @@ const T = {
 } as const;
 
 const PLATFORMS = [
-  { id: "TikTok",  label: "TikTok",  sub: "Creative Centre", color: "#1a1a2e", actor: "clockworks/tiktok-scraper",     supported: true  },
-  { id: "Meta",    label: "Meta",    sub: "Ad Library",      color: "#1877F2", actor: "apify/facebook-ads-scraper",    supported: true  },
-  { id: "YouTube", label: "YouTube", sub: "Shorts",          color: "#cc0000", actor: "",                              supported: false },
+  { id: "TikTok",  label: "TikTok",  sub: "Creative Centre", color: "#1a1a2e", supported: true  },
+  { id: "Meta",    label: "Meta",    sub: "Ad Library",      color: "#1877F2", supported: true  },
+  { id: "YouTube", label: "YouTube", sub: "Shorts",          color: "#cc0000", supported: false },
 ] as const;
 
 const NICHES = ["Beauty & Skincare", "Health & Wellness", "Fitness", "DTC / E-commerce", "Finance", "SaaS / Tech"];
@@ -42,6 +42,7 @@ type JobEntry = {
   databaseName?: string;
   keyword?: string;
   actor?: string;
+  platform?: string;
   imported?: number;
   rowCount?: number;
   totalRows?: number;
@@ -458,7 +459,12 @@ function HistoryPane({ onCounts }: { onCounts: (n: number) => void }) {
 
   const visible = useMemo(() => {
     if (filter === "All") return jobs;
-    return jobs.filter((j) => (j.actor ?? "").toLowerCase().includes(filter.toLowerCase()) || (j.source ?? "").toLowerCase().includes(filter.toLowerCase()));
+    const f = filter.toLowerCase();
+    return jobs.filter((j) =>
+      (j.platform ?? "").toLowerCase().includes(f) ||
+      (j.source ?? "").toLowerCase().includes(f) ||
+      (j.actor ?? "").toLowerCase().includes(f),
+    );
   }, [jobs, filter]);
 
   return (
@@ -469,7 +475,7 @@ function HistoryPane({ onCounts }: { onCounts: (n: number) => void }) {
           {activeDb && <> · scoped to <strong style={{ color: T.text }}>{activeDb.name}</strong></>}
         </span>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...selectStyle(), width: "auto", fontSize: 11, padding: "5px 8px" }}>
-          {["All", "TikTok", "Meta", "YouTube", "Apify", "Import"].map((p) => <option key={p}>{p}</option>)}
+          {["All", "TikTok", "Meta", "Instagram", "YouTube", "BrightData", "Import"].map((p) => <option key={p}>{p}</option>)}
         </select>
       </div>
 
@@ -504,7 +510,7 @@ function JobRow({ j }: { j: JobEntry }) {
     s === "failed" || s === "error" ? T.rd : T.text2;
 
   const title = j.kind === "scrape"
-    ? `${j.actor?.includes("tiktok") ? "TikTok" : j.actor?.includes("facebook") ? "Meta" : j.actor?.includes("instagram") ? "Instagram" : "Apify"} · ${j.keyword ?? "—"}`
+    ? `${j.platform ?? "BrightData"} · ${j.keyword ?? "—"}`
     : `Import · ${j.source}${j.keyword ? ` · ${j.keyword}` : ""}`;
 
   const count = j.kind === "import" ? (j.imported ?? 0) : (j.rowCount ?? 0);
@@ -825,7 +831,7 @@ async function runScrape({ platformId, keywords, maxResults }: { platformId: str
   const res = await fetch("/api/discover", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ actor: platform.actor, keyword, maxResults, country: "US" }),
+    body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US" }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: "Unknown error" }));

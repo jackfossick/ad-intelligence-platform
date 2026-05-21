@@ -1,118 +1,109 @@
 import { prisma } from "@/lib/prisma";
+import {
+  fetchSnapshotItems,
+  getApiKey,
+  getDatasetId,
+  getSnapshotProgress,
+  isTerminal,
+  platformFromActor,
+  triggerSnapshot,
+  type SupportedPlatform,
+} from "@/lib/brightData";
 import { NextRequest, NextResponse } from "next/server";
 
-const APIFY_BASE = "https://api.apify.com/v2";
-
-// ── Actor presets ──────────────────────────────────────────────
-const ACTOR_INPUTS: Record<string, (opts: { keyword: string; maxResults: number; country: string }) => Record<string, unknown>> = {
-  // Facebook Ad Library scraper — needs a pre-built Ad Library search URL
-  "apify/facebook-ads-scraper": ({ keyword, maxResults, country }) => ({
-    startUrls: [{
-      url: `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(keyword)}&search_type=keyword_exact_phrase`,
-    }],
-    maxResults,
-  }),
-  // TikTok — hashtags array (not keywords)
-  "clockworks/tiktok-scraper": ({ keyword, maxResults }) => ({
-    hashtags: [keyword.replace(/^#/, "")],
-    resultsPerPage: maxResults,
-    proxyConfiguration: { useApifyProxy: true },
-  }),
-  // Instagram — directUrls with explore/tags URL (searchQueries doesn't work)
-  "apify/instagram-scraper": ({ keyword, maxResults }) => ({
-    directUrls: [`https://www.instagram.com/explore/tags/${encodeURIComponent(keyword.replace(/^#/, ""))}/`],
-    resultsType: "posts",
-    resultsLimit: maxResults,
-  }),
-};
-
-// POST /api/discover — start an Apify run
+// POST /api/discover — kick off a Bright Data dataset snapshot
 export async function POST(req: NextRequest) {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) {
-    return NextResponse.json({ error: "APIFY_TOKEN not set in environment." }, { status: 500 });
+  if (!getApiKey()) {
+    return NextResponse.json({ error: "BRIGHT_DATA_API_KEY not set in environment." }, { status: 500 });
   }
 
   const body = await req.json();
-  const { actor, keyword, maxResults = 20, country = "US" } = body as {
-    actor: string;
+  const { platform: platformIn, actor, keyword, maxResults = 20, country = "US" } = body as {
+    platform?: string;
+    actor?: string;
     keyword: string;
     maxResults?: number;
     country?: string;
   };
 
-  if (!actor || !keyword) {
-    return NextResponse.json({ error: "actor and keyword are required" }, { status: 400 });
+  // Accept either the new `platform` field or the legacy `actor` string from clients
+  // that haven't been updated yet.
+  const platform = (platformIn as SupportedPlatform | undefined)
+    ?? platformFromActor(actor);
+
+  if (!platform || !keyword) {
+    return NextResponse.json({ error: "platform and keyword are required" }, { status: 400 });
   }
 
-  const inputFn = ACTOR_INPUTS[actor];
-  const input = inputFn ? inputFn({ keyword, maxResults, country }) : { keyword, maxResults };
-
-  // Start Apify run
-  const apifyRes = await fetch(`${APIFY_BASE}/acts/${encodeURIComponent(actor)}/runs?token=${token}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!apifyRes.ok) {
-    const err = await apifyRes.text();
-    return NextResponse.json({ error: `Apify error: ${err}` }, { status: 502 });
+  const datasetId = getDatasetId(platform);
+  if (!datasetId) {
+    return NextResponse.json(
+      { error: `No Bright Data dataset configured for ${platform}. Set BRIGHT_DATA_DATASET_${platform.toUpperCase()} in .env.` },
+      { status: 500 },
+    );
   }
 
-  const apifyData = await apifyRes.json();
-  const runId = apifyData.data?.id;
+  let snapshotId: string;
+  try {
+    ({ snapshotId } = await triggerSnapshot(platform, { keyword, maxResults, country }));
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Bright Data trigger failed" }, { status: 502 });
+  }
 
-  // Record the run in our database
+  // ScrapeRun.actor now holds the BD dataset id so history rows are unambiguous.
   const run = await prisma.scrapeRun.create({
     data: {
-      actor,
+      actor:    datasetId,
       keyword,
-      platform: actor.includes("tiktok") ? "TikTok" : actor.includes("instagram") ? "Instagram" : "Meta",
-      status: "running",
+      platform,
+      status:   "running",
     },
   });
 
-  return NextResponse.json({ runId, scrapeRunId: run.id });
+  return NextResponse.json({ runId: snapshotId, scrapeRunId: run.id, platform, datasetId });
 }
 
-// GET /api/discover?runId=xxx — check status + fetch results
+// GET /api/discover?runId=<snapshotId> — poll status and (when ready) fetch rows
 export async function GET(req: NextRequest) {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) return NextResponse.json({ error: "APIFY_TOKEN not set" }, { status: 500 });
+  if (!getApiKey()) {
+    return NextResponse.json({ error: "BRIGHT_DATA_API_KEY not set" }, { status: 500 });
+  }
 
-  const runId = req.nextUrl.searchParams.get("runId");
-  if (!runId) return NextResponse.json({ error: "runId required" }, { status: 400 });
+  const snapshotId = req.nextUrl.searchParams.get("runId");
+  if (!snapshotId) return NextResponse.json({ error: "runId required" }, { status: 400 });
 
-  // Check run status
-  const statusRes = await fetch(`${APIFY_BASE}/actor-runs/${runId}?token=${token}`);
-  if (!statusRes.ok) return NextResponse.json({ error: "Failed to fetch run status" }, { status: 502 });
+  let progress;
+  try {
+    progress = await getSnapshotProgress(snapshotId);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "progress fetch failed" }, { status: 502 });
+  }
 
-  const statusData = await statusRes.json();
-  const run = statusData.data;
-  const status: string = run?.status ?? "UNKNOWN";
-  const isFinished = ["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status);
+  const status = progress.status ?? "unknown";
+  const finished = isTerminal(status);
 
-  if (!isFinished) {
+  if (!finished) {
     return NextResponse.json({ status, finished: false, items: [] });
   }
 
-  // Fetch dataset items if succeeded
   let items: Record<string, unknown>[] = [];
-  if (status === "SUCCEEDED") {
-    const datasetId = run.defaultDatasetId;
-    const dataRes = await fetch(`${APIFY_BASE}/datasets/${datasetId}/items?token=${token}&limit=100`);
-    if (dataRes.ok) {
-      items = await dataRes.json();
+  if (status.toLowerCase() === "ready") {
+    try {
+      items = await fetchSnapshotItems(snapshotId);
+    } catch (e) {
+      return NextResponse.json(
+        { status, finished: true, succeeded: false, error: e instanceof Error ? e.message : "snapshot fetch failed", items: [] },
+        { status: 200 },
+      );
     }
   }
 
   return NextResponse.json({
     status,
     finished: true,
-    succeeded: status === "SUCCEEDED",
+    succeeded: status.toLowerCase() === "ready",
     itemCount: items.length,
     items,
-    stats: run.stats,
+    stats: { records: progress.records, errors: progress.errors, cost: progress.cost },
   });
 }

@@ -1,7 +1,7 @@
 /**
  * GET /api/jobs
- * Returns unified job log: Apify ScrapeRuns + ImportJobs merged and sorted
- * by createdAt desc.
+ * Returns unified job log: Bright Data ScrapeRuns + ImportJobs merged and
+ * sorted by createdAt desc.
  *
  * Optional query: ?databaseId=xxx to filter ImportJobs by DB.
  */
@@ -18,6 +18,7 @@ export type JobEntry = {
   databaseName?: string;
   keyword?:     string;
   actor?:       string;
+  platform?:    string;
   imported?:    number;
   skipped?:     number;
   failed?:      number;
@@ -47,10 +48,11 @@ export async function GET(req: NextRequest) {
     ...scrapeRuns.map((r) => ({
       id:         r.id,
       kind:       "scrape" as const,
-      source:     "apify",
+      source:     "brightdata",
       status:     r.status,
       keyword:    r.keyword ?? undefined,
       actor:      r.actor,
+      platform:   r.platform ?? undefined,
       rowCount:   r.rowCount ?? undefined,
       cost:       r.cost ?? undefined,
       createdAt:  r.createdAt.toISOString(),

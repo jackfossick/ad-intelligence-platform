@@ -65,7 +65,7 @@ export const RECOMMENDED_ACTIONS = [
 export type RecommendedAction = typeof RECOMMENDED_ACTIONS[number];
 
 export const INGESTION_SOURCES = [
-  "apify", "claude_chrome", "csv", "manual",
+  "brightdata", "apify", "claude_chrome", "csv", "manual",
 ] as const;
 export type IngestionSource = typeof INGESTION_SOURCES[number];
 

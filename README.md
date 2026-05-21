@@ -17,20 +17,24 @@ npm install
 
 ### 2. Set up your environment file
 
-Copy the example file and fill in your Apify token:
+Copy the example file and fill in your Bright Data credentials:
 
 ```
 cp .env.example .env
 ```
 
-Then open `.env` in any text editor and add your Apify token:
+Then open `.env` and add your API key + one dataset id per platform you want to scrape:
 
 ```
-APIFY_TOKEN=your_actual_token_here
+BRIGHT_DATA_API_KEY=your_actual_key_here
+BRIGHT_DATA_DATASET_TIKTOK=gd_xxxxxxxxxxxxxxxx
+BRIGHT_DATA_DATASET_META=gd_xxxxxxxxxxxxxxxx
+BRIGHT_DATA_DATASET_INSTAGRAM=gd_xxxxxxxxxxxxxxxx
 DATABASE_URL="file:./dev.db"
 ```
 
-Get your Apify token from: https://console.apify.com/account/integrations
+- Get your API key from **https://brightdata.com/cp/setting/users**
+- Browse / find dataset IDs in the **Dataset Marketplace**: https://brightdata.com/cp/datasets/marketplace — each dataset has an id that starts with `gd_…`
 
 ### 3. Set up the database
 
@@ -52,33 +56,31 @@ Then open your browser and go to: **http://localhost:3000**
 
 ---
 
-## Uploading an existing CSV or Excel file
+## Running a Bright Data scrape
 
-1. Go to **Import / Export** in the sidebar
-2. Drag and drop your CSV or Excel file
-3. Review the column mapping (auto-matched where possible)
-4. Click **Import**
+1. Start the app (`npm run dev`).
+2. Open `/collect` (or `/discover` for the legacy single-job view).
+3. Pick a platform, enter a keyword, and click **Run scrape**.
 
----
-
-## Running an Apify scrape
-
-Make sure the app is running (`npm run dev`) first, then in a second terminal window:
-
-```
-npm run scrape -- --actor apify/facebook-ads-scraper --input scripts/inputs/facebook-example.json
-```
-
-Example actors to try:
-- `apify/facebook-ads-scraper` — Meta Ad Library
-- `clockworks/tiktok-scraper` — TikTok videos
-- `apify/instagram-scraper` — Instagram
+Behind the scenes the app calls:
+- `POST /api/discover` → triggers a Bright Data dataset snapshot, returns `{ runId: <snapshot_id>, scrapeRunId, platform, datasetId }`
+- `GET  /api/discover?runId=<snapshot_id>` → polls progress; once `status: ready` the response contains the rows
+- Each run is logged to the `ScrapeRun` table with `actor = <dataset id>`, `platform = TikTok|Meta|Instagram|YouTube`
 
 After scraping, normalize and import the data:
 
 ```
 npm run normalize
 ```
+
+---
+
+## Uploading an existing CSV or Excel file
+
+1. Go to **Import / Export** in the sidebar
+2. Drag and drop your CSV or Excel file
+3. Review the column mapping (auto-matched where possible)
+4. Click **Import**
 
 ---
 
@@ -110,15 +112,17 @@ Opens at http://localhost:5555
 
 ```
 /app              — Next.js pages and API routes
+  /api/discover   — Bright Data trigger + snapshot polling
 /components       — Shared UI components
-/scripts          — Terminal scripts (scrape, normalize, export)
-  /inputs         — Example input JSON files for Apify actors
+/lib
+  /brightData.ts  — Bright Data Datasets API client + platform → dataset mapping
+  /normalizeAdData.ts — Source-agnostic row normalizer
+/scripts          — Terminal scripts (normalize, export)
 /data
-  /raw            — Raw Apify output (JSON)
+  /raw            — Raw snapshot output (JSON)
   /processed      — Normalized data ready to import
   /exports        — CSV exports
 /prisma           — Database schema and migrations
-/lib              — Shared utilities
 ```
 
 ---
@@ -126,5 +130,5 @@ Opens at http://localhost:5555
 ## Security notes
 
 - Never share or commit your `.env` file (already in `.gitignore`)
-- Your Apify token is never logged or displayed
+- Your Bright Data API key is never logged or displayed
 - All data is stored locally — nothing sent to external servers

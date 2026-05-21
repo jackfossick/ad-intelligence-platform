@@ -13,7 +13,7 @@
  */
 
 export type RawAd = Record<string, unknown>;
-export type IngestionSource = "apify" | "claude_chrome" | "csv" | "manual";
+export type IngestionSource = "brightdata" | "apify" | "claude_chrome" | "csv" | "manual";
 
 export interface NormalizedAdInput {
   // Identity
@@ -201,17 +201,87 @@ export function extractApifyFields(raw: RawAd, actor: string): Partial<Normalize
   return {};
 }
 
+// ── Bright Data-specific field extraction ───────────────────────
+// BD Dataset Marketplace returns snake_case JSON rows. Field names vary per
+// dataset; the mappings below cover the documented common shapes for the
+// TikTok / Meta-Ad-Library / Instagram datasets we use.
+
+function extractBrightDataTikTok(raw: RawAd): Partial<NormalizedAdInput> {
+  return {
+    platform:         "TikTok",
+    externalId:       str(raw, "id", "video_id", "post_id"),
+    referenceUrl:     validUrl(str(raw, "url", "post_url", "web_video_url")),
+    creativeVideoUrl: validUrl(str(raw, "video_url", "download_url", "media_url")),
+    thumbnailUrl:     validUrl(str(raw, "thumbnail_url", "cover_url", "cover")),
+    brandOrCreator:   str(raw, "author_name", "username", "author"),
+    adCopy:           str(raw, "caption", "description", "text"),
+    views:            num(raw, "play_count", "view_count", "views"),
+    likes:            num(raw, "like_count", "likes", "digg_count"),
+    comments:         num(raw, "comment_count", "comments"),
+    shares:           num(raw, "share_count", "shares"),
+    firstSeen:        date(raw, "create_time", "posted_at", "timestamp"),
+  };
+}
+
+function extractBrightDataMeta(raw: RawAd): Partial<NormalizedAdInput> {
+  const archiveId = str(raw, "ad_archive_id", "archive_id", "id");
+  const libUrl = archiveId ? `https://www.facebook.com/ads/library/?id=${archiveId}` : null;
+  return {
+    platform:         "Meta",
+    externalId:       archiveId,
+    referenceUrl:     validUrl(libUrl ?? str(raw, "ad_library_url", "url")),
+    adLibraryUrl:     validUrl(libUrl ?? str(raw, "ad_library_url")),
+    creativeVideoUrl: validUrl(str(raw, "video_url", "creative_video_url", "video_hd_url", "video_sd_url")),
+    creativeImageUrl: validUrl(str(raw, "image_url", "creative_image_url")),
+    thumbnailUrl:     validUrl(str(raw, "thumbnail_url", "preview_image_url")),
+    brandOrCreator:   str(raw, "page_name", "advertiser_name", "page"),
+    adCopy:           str(raw, "ad_copy", "body", "ad_text"),
+    headline:         str(raw, "headline", "title", "link_title"),
+    destinationUrl:   validUrl(str(raw, "link_url", "destination_url", "landing_page_url")),
+    ctaType:          str(raw, "cta", "call_to_action"),
+    firstSeen:        date(raw, "start_date", "ad_started_at", "start_time"),
+    lastSeen:         date(raw, "end_date", "ad_ended_at", "end_time"),
+  };
+}
+
+function extractBrightDataInstagram(raw: RawAd): Partial<NormalizedAdInput> {
+  return {
+    platform:         "Instagram",
+    externalId:       str(raw, "id", "shortcode", "post_id"),
+    referenceUrl:     validUrl(str(raw, "post_url", "url", "permalink")),
+    creativeVideoUrl: validUrl(str(raw, "video_url", "media_url")),
+    thumbnailUrl:     validUrl(str(raw, "thumbnail_url", "display_url", "image_url")),
+    brandOrCreator:   str(raw, "username", "owner_username", "author"),
+    adCopy:           str(raw, "caption"),
+    views:            num(raw, "video_play_count", "play_count", "views"),
+    likes:            num(raw, "like_count", "likes"),
+    comments:         num(raw, "comment_count", "comments"),
+    firstSeen:        date(raw, "timestamp", "posted_at", "taken_at"),
+  };
+}
+
+export function extractBrightDataFields(raw: RawAd, platform: string): Partial<NormalizedAdInput> {
+  const p = platform.toLowerCase();
+  if (p.includes("tiktok"))    return extractBrightDataTikTok(raw);
+  if (p.includes("meta") || p.includes("facebook")) return extractBrightDataMeta(raw);
+  if (p.includes("instagram")) return extractBrightDataInstagram(raw);
+  return {};
+}
+
 // ── Main normalizer ──────────────────────────────────────────────
 
 export function normalizeAdData(
   raw: RawAd,
   source: IngestionSource,
-  opts: { actor?: string; keyword?: string } = {}
+  opts: { actor?: string; keyword?: string; platform?: string } = {}
 ): NormalizedAdInput | null {
   // Source-specific extraction first
   let extracted: Partial<NormalizedAdInput> = {};
   if (source === "apify" && opts.actor) {
     extracted = extractApifyFields(raw, opts.actor);
+  } else if (source === "brightdata") {
+    const plat = opts.platform ?? String(raw.platform ?? "");
+    if (plat) extracted = extractBrightDataFields(raw, plat);
   }
 
   // Generic field mapping (Claude Chrome + CSV + fallback)

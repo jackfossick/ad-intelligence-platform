@@ -11,8 +11,12 @@ export default function SettingsPage() {
           <h2 className="font-medium text-gray-800 mb-3">Environment Variables</h2>
           <p className="text-sm text-gray-500 mb-3">These are set in your <code className="bg-gray-100 px-1 rounded">.env</code> file in the project root. Never commit real values to git.</p>
           <div className="space-y-2 text-sm font-mono">
-            <EnvRow name="APIFY_TOKEN" set={!!process.env.APIFY_TOKEN} />
-            <EnvRow name="DATABASE_URL" set={!!process.env.DATABASE_URL} />
+            <EnvRow name="BRIGHT_DATA_API_KEY"        set={!!process.env.BRIGHT_DATA_API_KEY} />
+            <EnvRow name="BRIGHT_DATA_DATASET_TIKTOK" set={!!process.env.BRIGHT_DATA_DATASET_TIKTOK} />
+            <EnvRow name="BRIGHT_DATA_DATASET_META"   set={!!process.env.BRIGHT_DATA_DATASET_META} />
+            <EnvRow name="BRIGHT_DATA_DATASET_INSTAGRAM" set={!!process.env.BRIGHT_DATA_DATASET_INSTAGRAM} />
+            <EnvRow name="BRIGHT_DATA_DATASET_YOUTUBE" set={!!process.env.BRIGHT_DATA_DATASET_YOUTUBE} />
+            <EnvRow name="DATABASE_URL"               set={!!process.env.DATABASE_URL} />
           </div>
         </div>
 
@@ -25,7 +29,6 @@ export default function SettingsPage() {
           <h2 className="font-medium text-gray-800 mb-3">Useful Commands</h2>
           <div className="space-y-1.5 text-sm font-mono text-gray-700">
             <p><span className="text-gray-400">$ </span>npm run dev — start the app</p>
-            <p><span className="text-gray-400">$ </span>npm run scrape — run an Apify scrape</p>
             <p><span className="text-gray-400">$ </span>npm run normalize — normalize raw data</p>
             <p><span className="text-gray-400">$ </span>npm run export-csv — export database to CSV</p>
             <p><span className="text-gray-400">$ </span>npx prisma studio — browse database in browser</p>

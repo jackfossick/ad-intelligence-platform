@@ -17,9 +17,9 @@ type Run = {
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     running: "badge-blue", RUNNING: "badge-blue",
-    completed: "badge-green", succeeded: "badge-green", SUCCEEDED: "badge-green",
+    completed: "badge-green", ready: "badge-green", succeeded: "badge-green", SUCCEEDED: "badge-green",
     failed: "badge-coral", FAILED: "badge-coral",
-    aborted: "badge-gray", ABORTED: "badge-gray",
+    canceled: "badge-gray", aborted: "badge-gray", ABORTED: "badge-gray",
   };
   return <span className={`badge ${map[status] || "badge-gray"}`}>{status}</span>;
 }
@@ -44,28 +44,11 @@ export default function ScrapeRunsPage() {
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 500 }}>Scrape Runs</h2>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
-            History of Apify scraping jobs. Start new scrapes from the{" "}
+            History of Bright Data scraping jobs. Start new scrapes from the{" "}
             <Link href="/discover" style={{ color: "var(--color-accent)" }}>Discover</Link> page.
           </p>
         </div>
         <button className="btn btn-sm" onClick={load}>↻ Refresh</button>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">Run from terminal</div>
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
-          You can also trigger scrapes from the Discover page, or use CLI scripts:
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {[
-            "npx ts-node scripts/scrape.ts --actor apify/facebook-ads-scraper --keyword 'weight loss'",
-            "npx ts-node scripts/scrape.ts --actor clockworks/tiktok-scraper --keyword 'peptide'",
-          ].map((cmd, i) => (
-            <div key={i} style={{ background: "#111318", borderRadius: "var(--border-radius-md)", padding: "8px 14px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#7EB8F7", overflowX: "auto", whiteSpace: "nowrap" }}>
-              {cmd}
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -83,7 +66,7 @@ export default function ScrapeRunsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Actor</th>
+                  <th>Dataset</th>
                   <th>Keyword</th>
                   <th>Platform</th>
                   <th>Status</th>
