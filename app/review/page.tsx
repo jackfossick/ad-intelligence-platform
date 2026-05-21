@@ -56,13 +56,13 @@ function statusPill(ad: Ad): { label: string; bg: string; color: string } {
   switch (status) {
     case "reviewed": {
       const useful = String(ad.usefulnessStatus ?? "");
-      if (useful === "useful")    return { label: "Useful",    bg: "#EAF3DE", color: "#27500A" };
-      if (useful === "uncertain") return { label: "Skipped",   bg: "#F1EFE8", color: "#444441" };
-      if (useful === "not_useful")return { label: "Not useful",bg: "#FCEBEB", color: "#791F1F" };
+      if (useful === "useful")    return { label: "Useful",    bg: "#E1F5EE", color: "#085041" };
+      if (useful === "uncertain") return { label: "Skipped",   bg: "#F1EFE8", color: "#1A1A18" };
+      if (useful === "not_useful")return { label: "Not useful",bg: "#FEECEC", color: "#7A1F1F" };
       return { label: "Reviewed", bg: "#E6F1FB", color: "#0C447C" };
     }
-    case "useful":     return { label: "Useful",   bg: "#EAF3DE", color: "#27500A" };
-    case "rejected":   return { label: "Rejected", bg: "#FCEBEB", color: "#791F1F" };
+    case "useful":     return { label: "Useful",   bg: "#E1F5EE", color: "#085041" };
+    case "rejected":   return { label: "Rejected", bg: "#FEECEC", color: "#7A1F1F" };
     case "unreviewed":
     case "new":
     default:           return { label: "New",      bg: "#E6F1FB", color: "#0C447C" };
@@ -302,7 +302,7 @@ function ReviewPage() {
 
   if (error) {
     return (
-      <div className="card" style={{ padding: 12, marginBottom: 12, background: "#FCEBEB", color: "#791F1F", fontSize: 13 }}>
+      <div className="card" style={{ padding: 12, marginBottom: 12, background: "#FEECEC", color: "#7A1F1F", fontSize: 13 }}>
         {error}
       </div>
     );
@@ -349,7 +349,7 @@ function ReviewPage() {
             <div style={{
               height: "100%",
               width: `${total === 0 ? 0 : Math.round((reviewed / total) * 100)}%`,
-              background: "#534AB7", borderRadius: 2,
+              background: "#5B4FD9", borderRadius: 2,
             }} />
           </div>
           <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
@@ -411,7 +411,7 @@ function ReviewPage() {
                   &ldquo;{adCopy.length > 600 ? `${adCopy.slice(0, 600)}…` : adCopy}&rdquo;
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: "#A32D2D", fontStyle: "italic" }}>
+                <div style={{ fontSize: 12, color: "#7A1F1F", fontStyle: "italic" }}>
                   No ad copy / transcript captured.
                 </div>
               )}
@@ -471,7 +471,7 @@ function ReviewPage() {
                   {adUrl} ↗
                 </a>
               ) : (
-                <span style={{ fontSize: 12, color: "#A32D2D", fontStyle: "italic" }}>missing</span>
+                <span style={{ fontSize: 12, color: "#7A1F1F", fontStyle: "italic" }}>missing</span>
               )}
             </FieldBlock>
           </div>
@@ -479,10 +479,10 @@ function ReviewPage() {
 
         {/* Action row */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <ActionButton accent="#1D9E75" hover="#E1F5EE" textColor="#085041" kbd="K" onClick={onKeep}>Keep</ActionButton>
-          <ActionButton accent="#888780" hover="#F1EFE8" textColor="#444441" kbd="S" onClick={onSkip}>Skip</ActionButton>
-          <ActionButton accent="#EF9F27" hover="#FAEEDA" textColor="#633806" kbd="F" onClick={onFlag}>Flag</ActionButton>
-          <ActionButton accent="#E24B4A" hover="#FCEBEB" textColor="#791F1F" kbd="D" onClick={onDelete}>Delete</ActionButton>
+          <ActionButton accent="#27A06A" hover="#E1F5EE" textColor="#085041" kbd="K" onClick={onKeep}>Keep</ActionButton>
+          <ActionButton accent="#73726C" hover="#F1EFE8" textColor="#1A1A18" kbd="S" onClick={onSkip}>Skip</ActionButton>
+          <ActionButton accent="#D4870A" hover="#FEF3DA" textColor="#633806" kbd="F" onClick={onFlag}>Flag</ActionButton>
+          <ActionButton accent="#D14040" hover="#FEECEC" textColor="#7A1F1F" kbd="D" onClick={onDelete}>Delete</ActionButton>
         </div>
 
         {/* Footer hints */}
@@ -512,7 +512,7 @@ function ReviewPage() {
                 <ValItem key={spec.exportKey} severity={severity}>
                   {spec.label}
                   {issue && severity !== "ok" && (
-                    <span style={{ color: severity === "err" ? "#791F1F" : "#854F0B", marginLeft: 4 }}>
+                    <span style={{ color: severity === "err" ? "#7A1F1F" : "#633806", marginLeft: 4 }}>
                       — {issue.severity === "error" ? "required" : "missing"}
                     </span>
                   )}
@@ -531,7 +531,7 @@ function ReviewPage() {
                 label="Required"
                 ok={completeness.requiredOk}
                 total={completeness.requiredTotal}
-                color="#534AB7"
+                color="#5B4FD9"
               />
               <CompletenessRow
                 label="Optional"
@@ -546,10 +546,10 @@ function ReviewPage() {
         <div className="card" style={{ padding: 14 }}>
           <SectionTitle>This session</SectionTitle>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, fontSize: 12 }}>
-            <CounterRow label="Kept"    n={counter.kept}    color="#27500A" />
-            <CounterRow label="Skipped" n={counter.skipped} color="#444441" />
+            <CounterRow label="Kept"    n={counter.kept}    color="#085041" />
+            <CounterRow label="Skipped" n={counter.skipped} color="#1A1A18" />
             <CounterRow label="Flagged" n={counter.flagged} color="#633806" />
-            <CounterRow label="Deleted" n={counter.deleted} color="#791F1F" />
+            <CounterRow label="Deleted" n={counter.deleted} color="#7A1F1F" />
           </div>
         </div>
       </div>
@@ -592,8 +592,8 @@ function InlineSelect({
         style={{
           width: "100%", padding: "6px 8px", fontSize: 12,
           borderRadius: "var(--border-radius-md)",
-          border: `0.5px solid ${errored ? "#E24B4A" : "var(--color-border-secondary)"}`,
-          background: errored ? "#FCEBEB" : "var(--color-background-primary)",
+          border: `0.5px solid ${errored ? "#D14040" : "var(--color-border-secondary)"}`,
+          background: errored ? "#FEECEC" : "var(--color-background-primary)",
           color: "var(--color-text-primary)",
         }}
       >
@@ -667,10 +667,10 @@ function ValItem({ severity, children }: {
   children: React.ReactNode;
 }) {
   const config = severity === "ok"
-    ? { bg: "#EAF3DE", color: "#27500A", icon: "✓" }
+    ? { bg: "#E1F5EE", color: "#085041", icon: "✓" }
     : severity === "warn"
-    ? { bg: "#FAEEDA", color: "#633806", icon: "~" }
-    : { bg: "#FCEBEB", color: "#791F1F", icon: "!" };
+    ? { bg: "#FEF3DA", color: "#633806", icon: "~" }
+    : { bg: "#FEECEC", color: "#7A1F1F", icon: "!" };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
       <span style={{
@@ -695,7 +695,7 @@ function CompletenessRing({ pct }: { pct: number }) {
         <circle cx={28} cy={28} r={r} stroke="var(--color-background-tertiary)" strokeWidth={4} fill="none" />
         <circle
           cx={28} cy={28} r={r}
-          stroke="#534AB7" strokeWidth={4} fill="none"
+          stroke="#5B4FD9" strokeWidth={4} fill="none"
           strokeDasharray={`${dash} ${c - dash}`}
           strokeLinecap="round"
         />
@@ -744,7 +744,7 @@ function EmptyAllReviewed({
     <div className="card" style={{ padding: 32, maxWidth: 560, textAlign: "center", margin: "0 auto" }}>
       <div style={{
         width: 56, height: 56, borderRadius: "50%",
-        background: "#EAF3DE", color: "#27500A",
+        background: "#E1F5EE", color: "#085041",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 24, margin: "0 auto 16px",
       }}>✓</div>
@@ -756,10 +756,10 @@ function EmptyAllReviewed({
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8,
         marginBottom: 20, fontSize: 12,
       }}>
-        <SessionStat label="Kept"    n={kept}    color="#27500A" />
-        <SessionStat label="Skipped" n={skipped} color="#444441" />
+        <SessionStat label="Kept"    n={kept}    color="#085041" />
+        <SessionStat label="Skipped" n={skipped} color="#1A1A18" />
         <SessionStat label="Flagged" n={flagged} color="#633806" />
-        <SessionStat label="Deleted" n={deleted} color="#791F1F" />
+        <SessionStat label="Deleted" n={deleted} color="#7A1F1F" />
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
         <Link
@@ -777,7 +777,7 @@ function EmptyAllReviewed({
           href="/validate"
           style={{
             padding: "6px 14px", borderRadius: "var(--border-radius-md)",
-            border: "0.5px solid #534AB7", background: "#534AB7", color: "#EEEDFE",
+            border: "0.5px solid #5B4FD9", background: "#5B4FD9", color: "#EEEDFE",
             textDecoration: "none", fontSize: 12, fontWeight: 500,
           }}
         >

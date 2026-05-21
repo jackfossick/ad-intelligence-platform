@@ -170,7 +170,7 @@ function HealthPill() {
   if (pct === null) return null;
 
   const bar = pct >= 80 ? T.green : pct >= 50 ? T.amber : T.red;
-  const txt = pct >= 80 ? T.gd : pct >= 50 ? "#854F0B" : T.rd;
+  const txt = pct >= 80 ? T.gd : pct >= 50 ? "#633806" : T.rd;
 
   return (
     <span title="Dataset readiness — % of ads in this database that are export-ready" style={{

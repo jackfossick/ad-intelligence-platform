@@ -178,11 +178,11 @@ export default function ExportPage() {
         {summary && summary.blocked > 0 && (
           <div style={{
             display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px",
-            background: "#FCEBEB", border: "0.5px solid #F7C1C1",
-            borderRadius: "var(--border-radius-md)", fontSize: 12, color: "#791F1F",
+            background: "#FEECEC", border: "0.5px solid #F7C1C1",
+            borderRadius: "var(--border-radius-md)", fontSize: 12, color: "#7A1F1F",
           }}>
             <span style={{
-              width: 16, height: 16, borderRadius: "50%", background: "#E24B4A", color: "#fff",
+              width: 16, height: 16, borderRadius: "50%", background: "#D14040", color: "#fff",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10,
               flexShrink: 0, marginTop: 1, fontWeight: 700,
             }}>!</span>
@@ -192,7 +192,7 @@ export default function ExportPage() {
               {hardBlocked
                 ? "Resolve before proceeding, or enable \"Export valid rows only\" to skip them."
                 : `They will be excluded from this export.`}{" "}
-              <Link href="/validate" style={{ color: "#791F1F", textDecoration: "underline" }}>
+              <Link href="/validate" style={{ color: "#7A1F1F", textDecoration: "underline" }}>
                 View in Validate →
               </Link>
             </div>
@@ -307,7 +307,7 @@ export default function ExportPage() {
                 style={{
                   flex: 1, padding: "10px",
                   borderRadius: "var(--border-radius-md)",
-                  border: format === f ? "0.5px solid #534AB7" : "0.5px solid var(--color-border-tertiary)",
+                  border: format === f ? "0.5px solid #5B4FD9" : "0.5px solid var(--color-border-tertiary)",
                   background: format === f ? "#EEEDFE" : "var(--color-background-primary)",
                   color: format === f ? "#26215C" : "var(--color-text-secondary)",
                   fontWeight: format === f ? 500 : 400,
@@ -337,7 +337,7 @@ export default function ExportPage() {
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
               Skips rows with hard errors. Recommended for downstream pipelines.
               {summary && validOnly && summary.blocked > 0 && (
-                <span style={{ color: "#854F0B", marginLeft: 4 }}>
+                <span style={{ color: "#633806", marginLeft: 4 }}>
                   ({summary.blocked} will be excluded)
                 </span>
               )}
@@ -353,8 +353,8 @@ export default function ExportPage() {
           style={{
             width: "100%", padding: "12px", fontSize: 13, fontWeight: 500,
             borderRadius: "var(--border-radius-md)",
-            border: "0.5px solid #534AB7",
-            background: hardBlocked ? "#534AB7" : "#534AB7",
+            border: "0.5px solid #5B4FD9",
+            background: hardBlocked ? "#5B4FD9" : "#5B4FD9",
             color: "#EEEDFE",
             cursor: hardBlocked || !effectiveDb ? "not-allowed" : "pointer",
             opacity: hardBlocked || !effectiveDb ? 0.45 : 1,
@@ -369,7 +369,7 @@ export default function ExportPage() {
         </button>
 
         {lastExported && (
-          <div style={{ fontSize: 11, color: "#27500A" }}>
+          <div style={{ fontSize: 11, color: "#085041" }}>
             ✓ Last exported at {lastExported}
           </div>
         )}
@@ -389,9 +389,9 @@ export default function ExportPage() {
           </div>
           <HealthDonut summary={summary} pct={healthPct} />
           <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
-            <LegendDot color="#639922" label="Ready" />
-            <LegendDot color="#EF9F27" label="Partial" />
-            <LegendDot color="#E24B4A" label="Invalid" />
+            <LegendDot color="#27A06A" label="Ready" />
+            <LegendDot color="#D4870A" label="Partial" />
+            <LegendDot color="#D14040" label="Invalid" />
           </div>
         </div>
 
@@ -404,9 +404,9 @@ export default function ExportPage() {
             Dataset stats
           </div>
           <DatasetStat label="Total ads"     value={total > 0 ? String(total) : "—"} />
-          <DatasetStat label="Blocked"       value={summary ? String(blocked)   : "—"} valueColor={blocked > 0  ? "#A32D2D" : undefined} />
-          <DatasetStat label="With warnings" value={summary ? String(warnings)  : "—"} valueColor={warnings > 0 ? "#854F0B" : undefined} />
-          <DatasetStat label="Clean"         value={summary ? String(clean)     : "—"} valueColor={clean > 0    ? "#3B6D11" : undefined} />
+          <DatasetStat label="Blocked"       value={summary ? String(blocked)   : "—"} valueColor={blocked > 0  ? "#7A1F1F" : undefined} />
+          <DatasetStat label="With warnings" value={summary ? String(warnings)  : "—"} valueColor={warnings > 0 ? "#633806" : undefined} />
+          <DatasetStat label="Clean"         value={summary ? String(clean)     : "—"} valueColor={clean > 0    ? "#085041" : undefined} />
           <DatasetStat label="Export-ready"  value={summary ? String(exportReady) : "—"} />
         </div>
 
@@ -440,7 +440,7 @@ export default function ExportPage() {
               <span style={{ color: "var(--color-text-secondary)" }}>{label}</span>
               <span style={{
                 fontSize: 9, fontWeight: 500,
-                color: req === "hard" ? "#A32D2D" : req === "soft" ? "#854F0B" : "var(--color-text-tertiary)",
+                color: req === "hard" ? "#7A1F1F" : req === "soft" ? "#633806" : "var(--color-text-tertiary)",
               }}>
                 {req === "hard" ? "● hard" : req === "soft" ? "◐ soft" : "○ optional"}
               </span>
@@ -463,13 +463,13 @@ export default function ExportPage() {
               Exporting <strong>{exportCount.toLocaleString()} ad{exportCount === 1 ? "" : "s"}</strong> from{" "}
               <strong>{activeDb?.name}</strong>
               {validOnly && summary && summary.blocked > 0 && (
-                <span style={{ color: "#854F0B" }}> — {summary.blocked} blocked rows excluded</span>
+                <span style={{ color: "#633806" }}> — {summary.blocked} blocked rows excluded</span>
               )}.
             </div>
             {!summary && (
               <div style={{
                 fontSize: 12, padding: "8px 12px", borderRadius: 6, marginBottom: 16,
-                background: "#FEF3C7", color: "#854F0B",
+                background: "#FEF3DA", color: "#633806",
               }}>
                 ⚠ Schema not validated. Run validation first to check for blocking errors.
               </div>
@@ -515,9 +515,9 @@ function CheckpointCard({
   children: React.ReactNode;
 }) {
   const headerStyle =
-    severity === "ok"   ? { background: "#EAF3DE", color: "#27500A", border: "#C0DD97" } :
-    severity === "warn" ? { background: "#FAEEDA", color: "#633806", border: "#FAC775" } :
-    severity === "err"  ? { background: "#FCEBEB", color: "#791F1F", border: "#F7C1C1" } :
+    severity === "ok"   ? { background: "#E1F5EE", color: "#085041", border: "#9FE1CB" } :
+    severity === "warn" ? { background: "#FEF3DA", color: "#633806", border: "#FAC775" } :
+    severity === "err"  ? { background: "#FEECEC", color: "#7A1F1F", border: "#F7C1C1" } :
                           { background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", border: "var(--color-border-tertiary)" };
   return (
     <div style={{
@@ -548,9 +548,9 @@ function CheckRow({
   valueClass?: Severity;
 }) {
   const valColor =
-    valueClass === "ok"   ? "#3B6D11" :
-    valueClass === "warn" ? "#854F0B" :
-    valueClass === "err"  ? "#A32D2D" :
+    valueClass === "ok"   ? "#085041" :
+    valueClass === "warn" ? "#633806" :
+    valueClass === "err"  ? "#7A1F1F" :
                             "var(--color-text-primary)";
   return (
     <div style={{
@@ -588,7 +588,7 @@ function HealthDonut({
           <g transform="rotate(-90 45 45)">
             {cleanLen > 0 && (
               <circle
-                cx={45} cy={45} r={r} fill="none" stroke="#639922" strokeWidth={8}
+                cx={45} cy={45} r={r} fill="none" stroke="#27A06A" strokeWidth={8}
                 strokeDasharray={`${cleanLen} ${c - cleanLen}`}
                 strokeDashoffset={0}
                 strokeLinecap="butt"
@@ -596,7 +596,7 @@ function HealthDonut({
             )}
             {warnLen > 0 && (
               <circle
-                cx={45} cy={45} r={r} fill="none" stroke="#EF9F27" strokeWidth={8}
+                cx={45} cy={45} r={r} fill="none" stroke="#D4870A" strokeWidth={8}
                 strokeDasharray={`${warnLen} ${c - warnLen}`}
                 strokeDashoffset={-cleanLen}
                 strokeLinecap="butt"
@@ -604,7 +604,7 @@ function HealthDonut({
             )}
             {blockedLen > 0 && (
               <circle
-                cx={45} cy={45} r={r} fill="none" stroke="#E24B4A" strokeWidth={8}
+                cx={45} cy={45} r={r} fill="none" stroke="#D14040" strokeWidth={8}
                 strokeDasharray={`${blockedLen} ${c - blockedLen}`}
                 strokeDashoffset={-(cleanLen + warnLen)}
                 strokeLinecap="butt"
@@ -653,8 +653,8 @@ function DatasetStat({
 
 function IssueBadge({ severity }: { severity: "error" | "warning" | "info" }) {
   const cfg = {
-    error:   { bg: "#FCEBEB", color: "#A32D2D", label: "error" },
-    warning: { bg: "#FAEEDA", color: "#854F0B", label: "warn" },
+    error:   { bg: "#FEECEC", color: "#7A1F1F", label: "error" },
+    warning: { bg: "#FEF3DA", color: "#633806", label: "warn" },
     info:    { bg: "#EEF4FF", color: "#1D64D8", label: "info" },
   }[severity];
   return (
@@ -714,11 +714,11 @@ function PreviewTable({ rows }: { rows: RowValidationResult[] }) {
                 })}
                 <td style={{ padding: "5px 8px" }}>
                   {r.blocked ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "#A32D2D", background: "#FCEBEB", padding: "2px 6px", borderRadius: 4 }}>blocked</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#7A1F1F", background: "#FEECEC", padding: "2px 6px", borderRadius: 4 }}>blocked</span>
                   ) : r.issues.some((x) => x.severity === "warning") ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "#854F0B", background: "#FAEEDA", padding: "2px 6px", borderRadius: 4 }}>warns</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#633806", background: "#FEF3DA", padding: "2px 6px", borderRadius: 4 }}>warns</span>
                   ) : (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "#3B6D11", background: "#EAF3DE", padding: "2px 6px", borderRadius: 4 }}>ok</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#085041", background: "#E1F5EE", padding: "2px 6px", borderRadius: 4 }}>ok</span>
                   )}
                 </td>
               </tr>

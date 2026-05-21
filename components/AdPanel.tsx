@@ -65,8 +65,8 @@ function computeScores(fields: Record<string, unknown>) {
 function taggingBadgeStyle(status: string): React.CSSProperties {
   const map: Record<string, { color: string; bg: string }> = {
     untagged:       { color: '#6B7280', bg: '#F3F4F6' },
-    manual_tagged:  { color: '#1E40AF', bg: '#DBEAFE' },
-    ai_tagged:      { color: '#166534', bg: '#DCFCE7' },
+    manual_tagged:  { color: '#0C447C', bg: '#E6F1FB' },
+    ai_tagged:      { color: '#085041', bg: '#E1F5EE' },
     human_reviewed: { color: '#7C3AED', bg: '#EDE9FE' },
   };
   const cfg = map[status] ?? map.untagged;
@@ -75,25 +75,25 @@ function taggingBadgeStyle(status: string): React.CSSProperties {
 
 function reviewBadgeStyle(status: string): React.CSSProperties {
   const map: Record<string, { color: string; bg: string }> = {
-    new:        { color: '#92400E', bg: '#FEF3C7' },
-    unreviewed: { color: '#92400E', bg: '#FEF3C7' },
-    reviewed:   { color: '#1E40AF', bg: '#DBEAFE' },
-    useful:     { color: '#166534', bg: '#DCFCE7' },
-    rejected:   { color: '#991B1B', bg: '#FEE2E2' },
+    new:        { color: '#633806', bg: '#FEF3DA' },
+    unreviewed: { color: '#633806', bg: '#FEF3DA' },
+    reviewed:   { color: '#0C447C', bg: '#E6F1FB' },
+    useful:     { color: '#085041', bg: '#E1F5EE' },
+    rejected:   { color: '#7A1F1F', bg: '#FEECEC' },
   };
   const cfg = map[status?.toLowerCase()] ?? map.new;
   return { fontSize: 10, fontWeight: 500, padding: '2px 7px', borderRadius: 12, color: cfg.color, background: cfg.bg, whiteSpace: 'nowrap' as const };
 }
 
 function scoreColor(score: number): string {
-  if (score >= 7) return '#166534';
-  if (score >= 5) return '#92400E';
-  return '#991B1B';
+  if (score >= 7) return '#085041';
+  if (score >= 5) return '#633806';
+  return '#7A1F1F';
 }
 function scoreBg(score: number): string {
-  if (score >= 7) return '#DCFCE7';
-  if (score >= 5) return '#FEF3C7';
-  return '#FEE2E2';
+  if (score >= 7) return '#E1F5EE';
+  if (score >= 5) return '#FEF3DA';
+  return '#FEECEC';
 }
 
 // ── Collapsible Section ────────────────────────────────────────
@@ -487,9 +487,9 @@ export default function AdPanel({
             {F.select('taggingStatus', 'Tagging Status', TAGGING_STATUSES)}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            <button className="btn btn-sm" style={{ borderColor: '#16A34A', color: '#16A34A' }}
+            <button className="btn btn-sm" style={{ borderColor: '#27A06A', color: '#27A06A' }}
               onClick={() => patchImmediate('reviewStatus', 'useful')}>✓ Mark Useful</button>
-            <button className="btn btn-sm" style={{ borderColor: '#DC2626', color: '#DC2626' }}
+            <button className="btn btn-sm" style={{ borderColor: '#D14040', color: '#D14040' }}
               onClick={() => patchImmediate('reviewStatus', 'rejected')}>✗ Skip</button>
             <button className="btn btn-sm"
               onClick={() => patchImmediate('reviewStatus', 'new')}>↺ Reset</button>
@@ -612,8 +612,8 @@ export default function AdPanel({
           {aiMessage && (
             <div style={{
               fontSize: 12, padding: '8px 12px', borderRadius: 'var(--border-radius-md)',
-              color: aiMessage.type === 'success' ? '#166534' : '#991B1B',
-              background: aiMessage.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+              color: aiMessage.type === 'success' ? '#085041' : '#7A1F1F',
+              background: aiMessage.type === 'success' ? '#E1F5EE' : '#FEECEC',
               lineHeight: 1.5,
             }}>
               {aiMessage.text}
