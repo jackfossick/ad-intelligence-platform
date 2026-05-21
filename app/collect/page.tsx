@@ -14,10 +14,14 @@ const T = {
   border: "#e8e6df", border2: "#d3d1c7",
 } as const;
 
+// inputKind drives the keyword-field label and placeholder per platform:
+//   keyword  → free-form search term (TikTok, Meta, YouTube)
+//   username → Instagram handle (the BD IG dataset discovers by username, not hashtag)
 const PLATFORMS = [
-  { id: "TikTok",  label: "TikTok",  sub: "Creative Centre", color: "#1a1a2e", actor: "clockworks/tiktok-scraper",     supported: true  },
-  { id: "Meta",    label: "Meta",    sub: "Ad Library",      color: "#1877F2", actor: "apify/facebook-ads-scraper",    supported: true  },
-  { id: "YouTube", label: "YouTube", sub: "Shorts",          color: "#cc0000", actor: "",                              supported: false },
+  { id: "TikTok",    label: "TikTok",    sub: "Creative Centre", color: "#1a1a2e", supported: true,  inputKind: "keyword"  },
+  { id: "Meta",      label: "Meta",      sub: "Ad Library",      color: "#1877F2", supported: true,  inputKind: "keyword"  },
+  { id: "Instagram", label: "Instagram", sub: "by Username",     color: "#534AB7", supported: true,  inputKind: "username" },
+  { id: "YouTube",   label: "YouTube",   sub: "Search",          color: "#cc0000", supported: true,  inputKind: "keyword"  },
 ] as const;
 
 const NICHES = ["Beauty & Skincare", "Health & Wellness", "Fitness", "DTC / E-commerce", "Finance", "SaaS / Tech"];
@@ -42,6 +46,7 @@ type JobEntry = {
   databaseName?: string;
   keyword?: string;
   actor?: string;
+  platform?: string;
   imported?: number;
   rowCount?: number;
   totalRows?: number;
@@ -260,7 +265,9 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
     }
   };
 
-  const supported = PLATFORMS.find((p) => p.id === platform)?.supported ?? false;
+  const selectedPlatform = PLATFORMS.find((p) => p.id === platform);
+  const supported = selectedPlatform?.supported ?? false;
+  const inputKind = selectedPlatform?.inputKind ?? "keyword";
   const estMin = Math.max(1, Math.round(maxAds / 25));
 
   return (
@@ -269,7 +276,7 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
         {/* Platform */}
         <div>
           <div style={cardTitleStyle()}>Platform</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
             {PLATFORMS.map((p) => (
               <div
                 key={p.id}
@@ -285,7 +292,7 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
                 }}
               >
                 <div style={{ width: 22, height: 22, borderRadius: 6, background: p.color, color: "#fff", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {p.id === "TikTok" ? "TT" : p.id === "Meta" ? "M" : "YT"}
+                  {p.id === "TikTok" ? "TT" : p.id === "Meta" ? "M" : p.id === "Instagram" ? "IG" : "YT"}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{p.label}</div>
                 <div style={{ fontSize: 10, color: T.text2 }}>{p.sub}{!p.supported && " · coming soon"}</div>
@@ -299,9 +306,12 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
 
         {/* Keywords + Niche */}
         <div>
-          <div style={cardTitleStyle()}>Keywords & target</div>
+          <div style={cardTitleStyle()}>{inputKind === "username" ? "Usernames & target" : "Keywords & target"}</div>
           <div style={fieldStyle()}>
-            <div style={fieldLabelStyle()}>Keywords <span style={{ color: T.text3, fontWeight: 400 }}>— press Enter</span></div>
+            <div style={fieldLabelStyle()}>
+              {inputKind === "username" ? "Usernames" : "Keywords"}
+              <span style={{ color: T.text3, fontWeight: 400 }}> — press Enter</span>
+            </div>
             <div
               onClick={() => document.getElementById("kwi")?.focus()}
               style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 8px", borderRadius: 8, background: T.bg2, border: `1px solid ${T.border2}`, minHeight: 36, cursor: "text" }}
@@ -316,10 +326,15 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
               <input
                 id="kwi" value={kwInput} onChange={(e) => setKwInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(kwInput); } }}
-                placeholder={keywords.length ? "" : "Add keyword..."}
+                placeholder={keywords.length ? "" : inputKind === "username" ? "Add username..." : "Add keyword..."}
                 style={{ flex: 1, minWidth: 80, border: "none", outline: "none", background: "transparent", fontSize: 12, color: T.text, padding: 0 }}
               />
             </div>
+            {inputKind === "username" && (
+              <div style={{ fontSize: 10, color: T.text2, marginTop: 4 }}>
+                Bright Data's Instagram scraper discovers posts by username — enter one or more handles (e.g. <code>natgeo</code>).
+              </div>
+            )}
           </div>
           <div style={{ ...fieldStyle(), marginBottom: 0 }}>
             <div style={fieldLabelStyle()}>Niche</div>
@@ -408,7 +423,7 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
         {error && <p style={{ fontSize: 11, color: T.rd, margin: 0 }}>{error}</p>}
         {!supported && (
           <p style={{ fontSize: 11, color: T.rd, margin: 0 }}>
-            {platform} scraping isn't wired yet. Pick TikTok or Meta to run.
+            {platform} scraping isn't wired yet.
           </p>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -458,7 +473,12 @@ function HistoryPane({ onCounts }: { onCounts: (n: number) => void }) {
 
   const visible = useMemo(() => {
     if (filter === "All") return jobs;
-    return jobs.filter((j) => (j.actor ?? "").toLowerCase().includes(filter.toLowerCase()) || (j.source ?? "").toLowerCase().includes(filter.toLowerCase()));
+    const f = filter.toLowerCase();
+    return jobs.filter((j) =>
+      (j.platform ?? "").toLowerCase().includes(f) ||
+      (j.source ?? "").toLowerCase().includes(f) ||
+      (j.actor ?? "").toLowerCase().includes(f),
+    );
   }, [jobs, filter]);
 
   return (
@@ -469,7 +489,7 @@ function HistoryPane({ onCounts }: { onCounts: (n: number) => void }) {
           {activeDb && <> · scoped to <strong style={{ color: T.text }}>{activeDb.name}</strong></>}
         </span>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...selectStyle(), width: "auto", fontSize: 11, padding: "5px 8px" }}>
-          {["All", "TikTok", "Meta", "YouTube", "Apify", "Import"].map((p) => <option key={p}>{p}</option>)}
+          {["All", "TikTok", "Meta", "Instagram", "YouTube", "BrightData", "Import"].map((p) => <option key={p}>{p}</option>)}
         </select>
       </div>
 
@@ -504,7 +524,7 @@ function JobRow({ j }: { j: JobEntry }) {
     s === "failed" || s === "error" ? T.rd : T.text2;
 
   const title = j.kind === "scrape"
-    ? `${j.actor?.includes("tiktok") ? "TikTok" : j.actor?.includes("facebook") ? "Meta" : j.actor?.includes("instagram") ? "Instagram" : "Apify"} · ${j.keyword ?? "—"}`
+    ? `${j.platform ?? "BrightData"} · ${j.keyword ?? "—"}`
     : `Import · ${j.source}${j.keyword ? ` · ${j.keyword}` : ""}`;
 
   const count = j.kind === "import" ? (j.imported ?? 0) : (j.rowCount ?? 0);
@@ -825,7 +845,7 @@ async function runScrape({ platformId, keywords, maxResults }: { platformId: str
   const res = await fetch("/api/discover", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ actor: platform.actor, keyword, maxResults, country: "US" }),
+    body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US" }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: "Unknown error" }));
@@ -846,7 +866,8 @@ function inferFromText(text: string): {
   const t = text.toLowerCase();
   const platform =
     /tiktok/.test(t) ? "TikTok" :
-    /meta|facebook|instagram/.test(t) ? "Meta" :
+    /instagram|insta\b|\big\b/.test(t) ? "Instagram" :
+    /meta|facebook/.test(t) ? "Meta" :
     /youtube|yt/.test(t) ? "YouTube" :
     null;
   const numMatch = t.match(/\b(\d{1,4})\b/);

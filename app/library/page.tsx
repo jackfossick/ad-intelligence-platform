@@ -45,10 +45,11 @@ function fmtDate(v: unknown): string | null {
 
 // ── Source badge ──────────────────────────────────────────────
 const SOURCE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  apify:        { label: "Apify",  color: "#1D64D8", bg: "#EEF4FF" },
-  claude_chrome:{ label: "Chrome", color: "#6B21A8", bg: "#F3E8FF" },
-  csv:          { label: "CSV",    color: "#065F46", bg: "#ECFDF5" },
-  manual:       { label: "Manual", color: "#633806", bg: "#FEF3DA" },
+  brightdata:   { label: "BrightData", color: "#0F766E", bg: "#CCFBF1" },
+  apify:        { label: "Apify",      color: "#1D64D8", bg: "#EEF4FF" },
+  claude_chrome:{ label: "Chrome",     color: "#6B21A8", bg: "#F3E8FF" },
+  csv:          { label: "CSV",        color: "#065F46", bg: "#ECFDF5" },
+  manual:       { label: "Manual",     color: "#633806", bg: "#FEF3DA" },
 };
 function SourceBadge({ source }: { source?: unknown }) {
   if (!source) return null;

@@ -13,7 +13,7 @@
  */
 
 export type RawAd = Record<string, unknown>;
-export type IngestionSource = "apify" | "claude_chrome" | "csv" | "manual";
+export type IngestionSource = "brightdata" | "apify" | "claude_chrome" | "csv" | "manual";
 
 export interface NormalizedAdInput {
   // Identity
@@ -201,17 +201,96 @@ export function extractApifyFields(raw: RawAd, actor: string): Partial<Normalize
   return {};
 }
 
+// ── Bright Data-specific field extraction ───────────────────────
+// BD Dataset Marketplace returns snake_case JSON rows. Field names vary per
+// dataset; the mappings below cover the documented common shapes for the
+// TikTok / Meta-Ad-Library / Instagram datasets we use.
+
+function extractBrightDataTikTok(raw: RawAd): Partial<NormalizedAdInput> {
+  // BD's TikTok dataset returns *profile-level* rows (not flat videos) with
+  // nested `top_videos[]` / `top_posts_data[]` arrays. Map the profile-level
+  // fields here; the first top_video supplies the creative video URL.
+  const topVideos = (raw.top_videos as Array<Record<string, unknown>> | undefined) ?? [];
+  const v0 = topVideos[0] ?? {};
+  return {
+    platform:         "TikTok",
+    externalId:       str(raw, "account_id", "id"),
+    referenceUrl:     validUrl(str(raw, "url")),
+    creativeVideoUrl: validUrl(str(v0, "video_url", "download_url")),
+    thumbnailUrl:     validUrl(str(raw, "profile_pic_url_hd", "profile_pic_url") ?? str(v0, "cover")),
+    brandOrCreator:   str(raw, "nickname", "account_id"),
+    adCopy:           str(raw, "biography", "signature") ?? str(v0, "description"),
+    views:            num(v0, "playcount", "play_count"),
+    likes:            num(raw, "likes", "like_count", "digg_count"),
+    comments:         num(v0, "commentcount", "comment_count"),
+    shares:           num(v0, "share_count"),
+    firstSeen:        date(raw, "create_time"),
+  };
+}
+
+function extractBrightDataMeta(raw: RawAd): Partial<NormalizedAdInput> {
+  const archiveId = str(raw, "ad_archive_id", "archive_id", "id");
+  const libUrl = archiveId ? `https://www.facebook.com/ads/library/?id=${archiveId}` : null;
+  return {
+    platform:         "Meta",
+    externalId:       archiveId,
+    referenceUrl:     validUrl(libUrl ?? str(raw, "ad_library_url", "url")),
+    adLibraryUrl:     validUrl(libUrl ?? str(raw, "ad_library_url")),
+    creativeVideoUrl: validUrl(str(raw, "video_url", "creative_video_url", "video_hd_url", "video_sd_url")),
+    creativeImageUrl: validUrl(str(raw, "image_url", "creative_image_url")),
+    thumbnailUrl:     validUrl(str(raw, "thumbnail_url", "preview_image_url")),
+    brandOrCreator:   str(raw, "page_name", "advertiser_name", "page"),
+    adCopy:           str(raw, "ad_copy", "body", "ad_text"),
+    headline:         str(raw, "headline", "title", "link_title"),
+    destinationUrl:   validUrl(str(raw, "link_url", "destination_url", "landing_page_url")),
+    ctaType:          str(raw, "cta", "call_to_action"),
+    firstSeen:        date(raw, "start_date", "ad_started_at", "start_time"),
+    lastSeen:         date(raw, "end_date", "ad_ended_at", "end_time"),
+  };
+}
+
+function extractBrightDataInstagram(raw: RawAd): Partial<NormalizedAdInput> {
+  // BD's IG dataset (discover_by=user_name) returns profile-level rows with a
+  // nested `posts[]` array, similar shape to the TikTok dataset.
+  const posts = (raw.posts as Array<Record<string, unknown>> | undefined) ?? [];
+  const p0 = posts[0] ?? {};
+  return {
+    platform:         "Instagram",
+    externalId:       str(raw, "id", "fbid"),
+    referenceUrl:     validUrl(str(raw, "profile_url", "url")),
+    creativeVideoUrl: validUrl(str(p0, "video_url", "media_url")),
+    thumbnailUrl:     validUrl(str(raw, "profile_image_link") ?? str(p0, "display_url", "thumbnail_url")),
+    brandOrCreator:   str(raw, "full_name", "account", "profile_name"),
+    adCopy:           str(raw, "biography") ?? str(p0, "caption"),
+    likes:            num(p0, "like_count", "likes"),
+    comments:         num(p0, "comment_count", "comments"),
+    views:            num(p0, "video_play_count", "play_count"),
+    firstSeen:        date(p0, "timestamp", "taken_at"),
+  };
+}
+
+export function extractBrightDataFields(raw: RawAd, platform: string): Partial<NormalizedAdInput> {
+  const p = platform.toLowerCase();
+  if (p.includes("tiktok"))    return extractBrightDataTikTok(raw);
+  if (p.includes("meta") || p.includes("facebook")) return extractBrightDataMeta(raw);
+  if (p.includes("instagram")) return extractBrightDataInstagram(raw);
+  return {};
+}
+
 // ── Main normalizer ──────────────────────────────────────────────
 
 export function normalizeAdData(
   raw: RawAd,
   source: IngestionSource,
-  opts: { actor?: string; keyword?: string } = {}
+  opts: { actor?: string; keyword?: string; platform?: string } = {}
 ): NormalizedAdInput | null {
   // Source-specific extraction first
   let extracted: Partial<NormalizedAdInput> = {};
   if (source === "apify" && opts.actor) {
     extracted = extractApifyFields(raw, opts.actor);
+  } else if (source === "brightdata") {
+    const plat = opts.platform ?? String(raw.platform ?? "");
+    if (plat) extracted = extractBrightDataFields(raw, plat);
   }
 
   // Generic field mapping (Claude Chrome + CSV + fallback)
