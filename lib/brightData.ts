@@ -50,38 +50,36 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
   return null;
 }
 
-/** Build the per-platform trigger payload BD expects. */
-function buildTriggerInput(
+/**
+ * Build the per-platform trigger payload + query params BD expects.
+ *
+ * BD's keyword-discovery vs URL-input distinction is per-dataset. The
+ * Datasets that support keyword search use `?type=discover_new&discover_by=keyword`
+ * and accept `{search_keyword, num_of_posts}`. Others only accept URLs.
+ */
+function buildTrigger(
   platform: SupportedPlatform,
   opts: { keyword: string; maxResults: number; country: string },
-): Record<string, unknown>[] {
-  const { keyword, maxResults, country } = opts;
+): { body: Record<string, unknown>[]; query: string } {
+  const { keyword, maxResults } = opts;
   switch (platform) {
     case "TikTok":
-      return [{
-        keyword: keyword.replace(/^#/, ""),
-        country,
-        num_of_posts: maxResults,
-      }];
+      // TikTok Posts dataset supports keyword discovery
+      return {
+        body: [{ search_keyword: keyword.replace(/^#/, ""), num_of_posts: maxResults }],
+        query: "&type=discover_new&discover_by=keyword",
+      };
     case "Meta":
-      return [{
-        url: `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(keyword)}&search_type=keyword_exact_phrase`,
-        keyword,
-        country,
-        num_of_posts: maxResults,
-      }];
     case "Instagram":
-      return [{
-        hashtag: keyword.replace(/^#/, ""),
-        country,
-        num_of_posts: maxResults,
-      }];
     case "YouTube":
-      return [{
-        keyword,
-        country,
-        num_of_videos: maxResults,
-      }];
+      // BD's FB / IG / YT datasets target specific URLs (page/profile/video).
+      // We can't keyword-search Meta ads via the marketplace; the input is a
+      // URL list. The caller of this lib is expected to surface a clear error
+      // for these platforms until per-platform URL ingestion is wired.
+      throw new Error(
+        `Bright Data Dataset Marketplace has no keyword-search scraper for ${platform}. ` +
+        `Provide page/profile URLs instead, or use a different ingestion strategy.`,
+      );
   }
 }
 
@@ -94,15 +92,18 @@ export async function triggerSnapshot(
   const datasetId = getDatasetId(platform);
   if (!datasetId) throw new Error(`No Bright Data dataset configured for ${platform}. Set BRIGHT_DATA_DATASET_${platform.toUpperCase()}.`);
 
-  const body = buildTriggerInput(platform, opts);
-  const res = await fetch(`${BD_BASE}/trigger?dataset_id=${encodeURIComponent(datasetId)}&include_errors=true`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const { body, query } = buildTrigger(platform, opts);
+  const res = await fetch(
+    `${BD_BASE}/trigger?dataset_id=${encodeURIComponent(datasetId)}&include_errors=true${query}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
 
   if (!res.ok) {
     const text = await res.text();
