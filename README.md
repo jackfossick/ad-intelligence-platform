@@ -30,19 +30,24 @@ BRIGHT_DATA_API_KEY=your_actual_key_here
 BRIGHT_DATA_DATASET_TIKTOK=gd_xxxxxxxxxxxxxxxx
 BRIGHT_DATA_DATASET_META=gd_xxxxxxxxxxxxxxxx
 BRIGHT_DATA_DATASET_INSTAGRAM=gd_xxxxxxxxxxxxxxxx
-DATABASE_URL="file:./dev.db"
+POSTGRES_PRISMA_URL="postgresql://user:pass@host:5432/db?schema=public&pgbouncer=true&connect_timeout=15"
+POSTGRES_URL_NON_POOLING="postgresql://user:pass@host:5432/db?schema=public"
 ```
 
 - Get your API key from **https://brightdata.com/cp/setting/users**
 - Browse / find dataset IDs in the **Dataset Marketplace**: https://brightdata.com/cp/datasets/marketplace — each dataset has an id that starts with `gd_…`
+
+For local Postgres, install with `brew install postgresql@16` and `createdb ad_intelligence`, then point both vars at the same local connection. In production, the Vercel-Neon integration auto-populates both: `POSTGRES_PRISMA_URL` (pooled, prisma-tuned) and `POSTGRES_URL_NON_POOLING` (direct, used for migrations).
 
 ### 3. Set up the database
 
 This only needs to be run once:
 
 ```
-npx prisma migrate dev
+npx prisma migrate deploy
 ```
+
+For local schema iteration, use `npx prisma migrate dev` instead.
 
 ---
 

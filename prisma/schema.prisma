@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 model Database {
@@ -103,7 +104,7 @@ model Ad {
   sourceType             String?
   priorityRank           Int?
 
-  extraFields            String?   // JSON string (SQLite doesn't support Json type)
+  extraFields            String?   // JSON-encoded string of unmapped columns
 
   // Collection-focused fields (added for v2 refactor)
   thumbnailUrl           String?
