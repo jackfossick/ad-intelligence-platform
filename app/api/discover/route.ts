@@ -51,14 +51,26 @@ export async function POST(req: NextRequest) {
   }
 
   // ScrapeRun.actor now holds the BD dataset id so history rows are unambiguous.
-  const run = await prisma.scrapeRun.create({
-    data: {
-      actor:    datasetId,
-      keyword,
-      platform,
-      status:   "running",
-    },
-  });
+  // Wrap the Prisma write so an unmigrated table or a non-writable filesystem
+  // (SQLite on Vercel serverless) returns a JSON error instead of an HTML 500
+  // page — otherwise the client only sees "Unknown error".
+  let run;
+  try {
+    run = await prisma.scrapeRun.create({
+      data: {
+        actor:    datasetId,
+        keyword,
+        platform,
+        status:   "running",
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "ScrapeRun DB write failed";
+    return NextResponse.json(
+      { error: `Scrape was triggered on Bright Data (snapshot ${snapshotId}), but recording it in our DB failed: ${msg}` },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ runId: snapshotId, scrapeRunId: run.id, platform, datasetId });
 }
