@@ -1,15 +1,11 @@
 /**
  * Bright Data Datasets API helpers.
  *
- * Provider strategy: **Option B — Web Scraper IDE custom scrapers.**
- * Each platform (TikTok / Meta / Instagram / YouTube) has a custom BD
- * scraper authored in the BD dashboard that accepts a uniform input
- * contract: { search_keyword: string, num_of_posts: number, country?: string }
- * and emits the dataset rows we ingest. Each custom scraper has its own
- * `gd_…` dataset id; those ids live in env vars below.
+ * Current setup uses BD's Scrapers-Library pre-built datasets (chosen via the
+ * ChatGPT-agent setup on 2026-05-21). The Datasets v3 API surface is the same
+ * for both pre-built and Web Scraper IDE datasets, so the client code is
+ * uniform; per-dataset input contracts may still differ (see buildTrigger).
  *
- * BD's Datasets API is async/snapshot-based and the same endpoints serve
- * both Marketplace and custom Web Scraper IDE datasets:
  *   1. Trigger a dataset run (POST /datasets/v3/trigger?dataset_id=…)
  *      → returns { snapshot_id }
  *   2. Poll progress         (GET  /datasets/v3/progress/{snapshot_id})
