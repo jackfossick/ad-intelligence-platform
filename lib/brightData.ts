@@ -56,12 +56,19 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
  *
  * Each Scrapers-Library dataset has its own input contract — confirmed
  * empirically on 2026-05-21 by probing each dataset and reading the
- * validation errors. See per-platform comments below.
+ * validation errors.
  *
  * - TikTok    (gd_l1villgoiiidt09ci):    discover_by=search_url, body {search_url, country}
  * - YouTube   (gd_lk56epmy2i5g7lzu0k):    discover_by=keyword,    body {keyword, country}
- * - Meta      (gd_lkaxegm826bjpoo9m5):    no discovery collector; needs direct snapshot URLs
+ * - Meta      (gd_lkaxegm826bjpoo9m5):    direct trigger (no discover) with an Ad Library URL
  * - Instagram (gd_l1vikfch901nx3by4):     discover_by=user_name,  body {user_name} — username, not keyword
+ *
+ * To present a uniform keyword UI we synthesize the right URL/handle for
+ * each platform from the user's keyword input:
+ *   - TikTok → https://www.tiktok.com/search?q={keyword}
+ *   - Meta   → https://www.facebook.com/ads/library/?…&q={keyword}…
+ *   - YouTube → keyword passed straight through
+ *   - Instagram → keyword treated as a username (UI labels this clearly)
  */
 function buildTrigger(
   platform: SupportedPlatform,
@@ -80,18 +87,17 @@ function buildTrigger(
         body: [{ keyword: term, country }],
         query: "&type=discover_new&discover_by=keyword",
       };
-    case "Meta":
-      // BD's Meta Ad Library dataset has no discovery collector — it only
-      // accepts direct snapshot triggers against specific Facebook page URLs.
-      // Surface a clear error so the UI can route Meta requests to a separate
-      // URL-input flow (out of scope for the keyword-driven /collect path).
-      throw new Error(
-        "Meta scraping via Bright Data needs a list of Facebook page URLs, not a keyword. " +
-        "The current /collect keyword flow doesn't apply to this dataset.",
-      );
+    case "Meta": {
+      const url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(term)}&search_type=keyword_exact_phrase`;
+      return {
+        body: [{ url }],
+        query: "", // Meta dataset has no discovery collector — direct trigger only
+      };
+    }
     case "Instagram":
-      // BD's IG dataset discovers by username, not hashtag/keyword. Treat the
-      // user's input as a handle (strip a leading @ if present).
+      // BD's IG dataset discovers by username, not hashtag/keyword. The UI
+      // surfaces a username field for Instagram so the keyword we receive
+      // here is treated as a single handle (strip a leading @ if present).
       return {
         body: [{ user_name: term.replace(/^@/, "") }],
         query: "&type=discover_new&discover_by=user_name",
