@@ -864,8 +864,15 @@ async function runScrape({ platformId, keywords, maxResults }: { platformId: str
     body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US" }),
   });
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: "Unknown error" }));
-    throw new Error(data.error ?? "Failed to start scrape.");
+    // The server should always return JSON. If it doesn't (HTML 500 from an
+    // unhandled exception, gateway timeout, etc.), include the status and a
+    // snippet of the body so the surfaced error explains the actual cause.
+    const text = await res.text();
+    let parsed: { error?: string } | null = null;
+    try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+    const msg = parsed?.error
+      ?? `Scrape failed (HTTP ${res.status}). ${text.slice(0, 200).trim() || "Empty response body."}`;
+    throw new Error(msg);
   }
   return res.json();
 }
