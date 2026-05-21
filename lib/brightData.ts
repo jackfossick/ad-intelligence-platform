@@ -1,15 +1,20 @@
 /**
  * Bright Data Datasets API helpers.
  *
- * BD's Datasets API is async/snapshot-based:
+ * Provider strategy: **Option B — Web Scraper IDE custom scrapers.**
+ * Each platform (TikTok / Meta / Instagram / YouTube) has a custom BD
+ * scraper authored in the BD dashboard that accepts a uniform input
+ * contract: { search_keyword: string, num_of_posts: number, country?: string }
+ * and emits the dataset rows we ingest. Each custom scraper has its own
+ * `gd_…` dataset id; those ids live in env vars below.
+ *
+ * BD's Datasets API is async/snapshot-based and the same endpoints serve
+ * both Marketplace and custom Web Scraper IDE datasets:
  *   1. Trigger a dataset run (POST /datasets/v3/trigger?dataset_id=…)
  *      → returns { snapshot_id }
  *   2. Poll progress         (GET  /datasets/v3/progress/{snapshot_id})
  *      → status: running | ready | failed
  *   3. Fetch snapshot rows   (GET  /datasets/v3/snapshot/{snapshot_id}?format=json)
- *
- * Dataset IDs are provided per BD account and exposed via env vars so we
- * never hard-code identifiers we don't own.
  */
 
 const BD_BASE = "https://api.brightdata.com/datasets/v3";
@@ -51,36 +56,29 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
 }
 
 /**
- * Build the per-platform trigger payload + query params BD expects.
+ * Build the trigger payload + query params BD expects.
  *
- * BD's keyword-discovery vs URL-input distinction is per-dataset. The
- * Datasets that support keyword search use `?type=discover_new&discover_by=keyword`
- * and accept `{search_keyword, num_of_posts}`. Others only accept URLs.
+ * All four platforms point at custom Web Scraper IDE datasets I author in
+ * the BD dashboard. Each scraper accepts the same input contract:
+ *   { search_keyword, num_of_posts, country }
+ *
+ * BD's keyword-discovery convention applies uniformly:
+ *   ?type=discover_new&discover_by=keyword
  */
 function buildTrigger(
   platform: SupportedPlatform,
   opts: { keyword: string; maxResults: number; country: string },
 ): { body: Record<string, unknown>[]; query: string } {
-  const { keyword, maxResults } = opts;
-  switch (platform) {
-    case "TikTok":
-      // TikTok Posts dataset supports keyword discovery
-      return {
-        body: [{ search_keyword: keyword.replace(/^#/, ""), num_of_posts: maxResults }],
-        query: "&type=discover_new&discover_by=keyword",
-      };
-    case "Meta":
-    case "Instagram":
-    case "YouTube":
-      // BD's FB / IG / YT datasets target specific URLs (page/profile/video).
-      // We can't keyword-search Meta ads via the marketplace; the input is a
-      // URL list. The caller of this lib is expected to surface a clear error
-      // for these platforms until per-platform URL ingestion is wired.
-      throw new Error(
-        `Bright Data Dataset Marketplace has no keyword-search scraper for ${platform}. ` +
-        `Provide page/profile URLs instead, or use a different ingestion strategy.`,
-      );
-  }
+  const { keyword, maxResults, country } = opts;
+  void platform; // input contract is platform-uniform under Option B
+  return {
+    body: [{
+      search_keyword: keyword.replace(/^#/, ""),
+      num_of_posts: maxResults,
+      country,
+    }],
+    query: "&type=discover_new&discover_by=keyword",
+  };
 }
 
 export async function triggerSnapshot(
