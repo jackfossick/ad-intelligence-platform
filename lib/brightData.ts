@@ -54,27 +54,49 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
 /**
  * Build the trigger payload + query params BD expects.
  *
- * All four platforms point at custom Web Scraper IDE datasets I author in
- * the BD dashboard. Each scraper accepts the same input contract:
- *   { search_keyword, num_of_posts, country }
+ * Each Scrapers-Library dataset has its own input contract — confirmed
+ * empirically on 2026-05-21 by probing each dataset and reading the
+ * validation errors. See per-platform comments below.
  *
- * BD's keyword-discovery convention applies uniformly:
- *   ?type=discover_new&discover_by=keyword
+ * - TikTok    (gd_l1villgoiiidt09ci):    discover_by=search_url, body {search_url, country}
+ * - YouTube   (gd_lk56epmy2i5g7lzu0k):    discover_by=keyword,    body {keyword, country}
+ * - Meta      (gd_lkaxegm826bjpoo9m5):    no discovery collector; needs direct snapshot URLs
+ * - Instagram (gd_l1vikfch901nx3by4):     discover_by=user_name,  body {user_name} — username, not keyword
  */
 function buildTrigger(
   platform: SupportedPlatform,
   opts: { keyword: string; maxResults: number; country: string },
 ): { body: Record<string, unknown>[]; query: string } {
-  const { keyword, maxResults, country } = opts;
-  void platform; // input contract is platform-uniform under Option B
-  return {
-    body: [{
-      search_keyword: keyword.replace(/^#/, ""),
-      num_of_posts: maxResults,
-      country,
-    }],
-    query: "&type=discover_new&discover_by=keyword",
-  };
+  const { keyword, country } = opts;
+  const term = keyword.replace(/^#/, "").trim();
+  switch (platform) {
+    case "TikTok":
+      return {
+        body: [{ search_url: `https://www.tiktok.com/search?q=${encodeURIComponent(term)}`, country }],
+        query: "&type=discover_new&discover_by=search_url",
+      };
+    case "YouTube":
+      return {
+        body: [{ keyword: term, country }],
+        query: "&type=discover_new&discover_by=keyword",
+      };
+    case "Meta":
+      // BD's Meta Ad Library dataset has no discovery collector — it only
+      // accepts direct snapshot triggers against specific Facebook page URLs.
+      // Surface a clear error so the UI can route Meta requests to a separate
+      // URL-input flow (out of scope for the keyword-driven /collect path).
+      throw new Error(
+        "Meta scraping via Bright Data needs a list of Facebook page URLs, not a keyword. " +
+        "The current /collect keyword flow doesn't apply to this dataset.",
+      );
+    case "Instagram":
+      // BD's IG dataset discovers by username, not hashtag/keyword. Treat the
+      // user's input as a handle (strip a leading @ if present).
+      return {
+        body: [{ user_name: term.replace(/^@/, "") }],
+        query: "&type=discover_new&discover_by=user_name",
+      };
+  }
 }
 
 export async function triggerSnapshot(
