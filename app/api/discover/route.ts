@@ -75,13 +75,16 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ runId: snapshotId, scrapeRunId: run.id, platform, datasetId });
 }
 
-// GET /api/discover?runId=<snapshotId> — poll status and (when ready) fetch rows
+// GET /api/discover?runId=<snapshotId>[&scrapeRunId=<id>] — poll status and
+// (when ready) fetch rows. Forwards BD's live `records` count so the UI can
+// render a progress bar instead of a blank spinner.
 export async function GET(req: NextRequest) {
   if (!getApiKey()) {
     return NextResponse.json({ error: "BRIGHT_DATA_API_KEY not set" }, { status: 500 });
   }
 
   const snapshotId = req.nextUrl.searchParams.get("runId");
+  const scrapeRunId = req.nextUrl.searchParams.get("scrapeRunId");
   if (!snapshotId) return NextResponse.json({ error: "runId required" }, { status: 400 });
 
   let progress;
@@ -93,21 +96,46 @@ export async function GET(req: NextRequest) {
 
   const status = progress.status ?? "unknown";
   const finished = isTerminal(status);
+  const stats = { records: progress.records, errors: progress.errors, cost: progress.cost };
 
   if (!finished) {
-    return NextResponse.json({ status, finished: false, items: [] });
+    return NextResponse.json({ status, finished: false, items: [], stats });
   }
 
   let items: Record<string, unknown>[] = [];
+  let fetchError: string | null = null;
   if (status.toLowerCase() === "ready") {
     try {
       items = await fetchSnapshotItems(snapshotId);
     } catch (e) {
-      return NextResponse.json(
-        { status, finished: true, succeeded: false, error: e instanceof Error ? e.message : "snapshot fetch failed", items: [] },
-        { status: 200 },
-      );
+      fetchError = e instanceof Error ? e.message : "snapshot fetch failed";
     }
+  }
+
+  // Mirror the terminal state onto our ScrapeRun row so Job History reflects
+  // the final outcome without a separate worker. Failures here are non-fatal —
+  // we still return the live snapshot data to the client.
+  if (scrapeRunId) {
+    try {
+      await prisma.scrapeRun.update({
+        where: { id: scrapeRunId },
+        data: {
+          status:   status.toLowerCase(),
+          rowCount: items.length || progress.records || null,
+          cost:     progress.cost ?? null,
+        },
+      });
+    } catch {
+      // ignore — the run might have been deleted, or the column may not
+      // accept this status; the UI still gets accurate live state.
+    }
+  }
+
+  if (fetchError) {
+    return NextResponse.json(
+      { status, finished: true, succeeded: false, error: fetchError, items: [], stats },
+      { status: 200 },
+    );
   }
 
   return NextResponse.json({
@@ -116,6 +144,6 @@ export async function GET(req: NextRequest) {
     succeeded: status.toLowerCase() === "ready",
     itemCount: items.length,
     items,
-    stats: { records: progress.records, errors: progress.errors, cost: progress.cost },
+    stats,
   });
 }
