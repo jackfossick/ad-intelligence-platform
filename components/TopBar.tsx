@@ -80,12 +80,24 @@ function DbChip() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  if (loading || !activeDb) {
+  if (loading) {
     return (
-      <span style={{ ...chipStyle, color: T.text3 }}>
+      <span style={{ ...chipStyle, color: T.text3 }} aria-busy="true">
         <span style={dotStyle(T.border2)} />
         Loading…
       </span>
+    );
+  }
+
+  if (!activeDb) {
+    return (
+      <Link
+        href="/databases"
+        style={{ ...chipStyle, border: `1px solid ${T.border2}`, color: T.text2, textDecoration: "none" }}
+      >
+        <span style={dotStyle(T.border2)} />
+        No database
+      </Link>
     );
   }
 
