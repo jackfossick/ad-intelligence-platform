@@ -5,6 +5,7 @@ import { X, ExternalLink, Edit3, Trash2, FileText } from "lucide-react";
 import { getYouTubeEmbedId, formatDate } from "@/lib/utils";
 import AdForm from "./AdForm";
 import ReplicationBrief from "./ReplicationBrief";
+import ConfirmModal from "./ConfirmModal";
 
 type Ad = Record<string, string | number | null>;
 
@@ -18,12 +19,19 @@ export default function AdDetailPanel({
   const [editing, setEditing] = useState(false);
   const [showBrief, setShowBrief] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const handleDelete = async () => {
-    if (!confirm("Delete this ad? This cannot be undone.")) return;
+  const handleDelete = () => setConfirmDelete(true);
+
+  const performDelete = async () => {
     setDeleting(true);
-    await fetch(`/api/ads/${ad.id}`, { method: "DELETE" });
-    onClose();
+    try {
+      await fetch(`/api/ads/${ad.id}`, { method: "DELETE" });
+      setConfirmDelete(false);
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const youtubeId = getYouTubeEmbedId(
@@ -177,6 +185,17 @@ export default function AdDetailPanel({
           <Field label="Scraped at" value={formatDate(ad.scraped_at as string)} />
         </Section>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete this ad?"
+        description={<>This will permanently delete this ad. This cannot be undone.</>}
+        confirmLabel="Delete ad"
+        destructive
+        loading={deleting}
+        onConfirm={performDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

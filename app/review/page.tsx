@@ -14,6 +14,7 @@ import { useDb } from "@/lib/db-context";
 import { HOOK_TYPES, CREATIVE_FORMATS, HOOK_TYPE_DESCRIPTIONS, FORMAT_DESCRIPTIONS } from "@/lib/enums";
 import { EXPORT_SCHEMA, validateRow } from "@/lib/schema-contract";
 import type { RowValidationResult } from "@/lib/schema-contract";
+import ConfirmModal from "@/components/ConfirmModal";
 
 type Ad = Record<string, unknown> & { id: string };
 
@@ -99,6 +100,8 @@ function ReviewPage() {
   const [error, setError]       = useState<string | null>(null);
   const [counter, setCounter]   = useState<Counter>(ZERO_COUNTER);
   const [savingField, setSavingField] = useState<null | "hookType" | "formatType">(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingNow, setDeletingNow] = useState(false);
 
   const load = useCallback(async () => {
     if (!dbId) { setAllAds([]); return; }
@@ -227,17 +230,27 @@ function ReviewPage() {
     }
   }, [patchCurrent, advance]);
 
-  const onDelete = useCallback(async () => {
+  const onDelete = useCallback(() => {
     if (!current) return;
-    if (!confirm(`Delete ad ${String(current.id).slice(0, 8)}…? This cannot be undone.`)) return;
-    const res = await fetch(`/api/ads/${current.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setError(`Delete failed: ${await res.text()}`);
-      return;
+    setConfirmDelete(true);
+  }, [current]);
+
+  const performDelete = useCallback(async () => {
+    if (!current) return;
+    setDeletingNow(true);
+    try {
+      const res = await fetch(`/api/ads/${current.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError(`Delete failed: ${await res.text()}`);
+        return;
+      }
+      setAllAds((prev) => prev.filter((a) => a.id !== current.id));
+      setCounter((c) => ({ ...c, deleted: c.deleted + 1 }));
+      // Cursor stays put — the deleted item disappears from queue, next item slides in.
+    } finally {
+      setDeletingNow(false);
+      setConfirmDelete(false);
     }
-    setAllAds((prev) => prev.filter((a) => a.id !== current.id));
-    setCounter((c) => ({ ...c, deleted: c.deleted + 1 }));
-    // Cursor stays put — the deleted item disappears from queue, next item slides in.
   }, [current]);
 
   // Inline edits for Hook + Format
@@ -553,6 +566,22 @@ function ReviewPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete this ad?"
+        description={
+          <>
+            This will permanently delete ad <span style={{ fontFamily: "var(--font-mono)" }}>{String(current.id).slice(0, 8)}…</span>
+            {" "}from the current database. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete ad"
+        destructive
+        loading={deletingNow}
+        onConfirm={performDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
