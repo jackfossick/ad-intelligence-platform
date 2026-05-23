@@ -55,6 +55,15 @@ type JobEntry = {
 };
 type Ad = Record<string, unknown> & { id: string };
 
+type ActiveScrape = {
+  runId:       string;   // Bright Data snapshot id
+  scrapeRunId: string;   // our ScrapeRun row id
+  platform:    string;
+  keyword:     string;
+  maxResults:  number;
+  startedAt:   number;
+};
+
 // ── Page ──────────────────────────────────────────────────────
 export default function CollectPage() {
   const { activeDb } = useDb();
@@ -135,12 +144,26 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: "run" | "a
 
 // ── SCRAPE PANE ───────────────────────────────────────────────
 function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) => void; setTab: (t: Tab) => void }) {
+  // Lift active-scrape state so it survives mode switches inside the scrape pane
+  // and so progress is visible immediately after the user clicks "Run scrape".
+  const [activeScrape, setActiveScrape] = useState<ActiveScrape | null>(null);
+
+  if (activeScrape) {
+    return (
+      <ScrapeProgressPanel
+        scrape={activeScrape}
+        onDismiss={() => setActiveScrape(null)}
+        onViewHistory={() => { setActiveScrape(null); setTab("history"); }}
+      />
+    );
+  }
+
   return mode === "fast"
-    ? <FastMode onSwitchToRegular={() => setMode("regular")} onLaunched={() => setTab("history")} />
-    : <RegularMode onLaunched={() => setTab("history")} />;
+    ? <FastMode onSwitchToRegular={() => setMode("regular")} onLaunched={setActiveScrape} />
+    : <RegularMode onLaunched={setActiveScrape} />;
 }
 
-function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: () => void }) {
+function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape) => void }) {
   const [text, setText] = useState("");
   const inferred = useMemo(() => inferFromText(text), [text]);
   const [running, setRunning] = useState(false);
@@ -207,12 +230,12 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                 if (!inferred.platform || !inferred.keywords.length) return;
                 setRunning(true); setError(null);
                 try {
-                  await runScrape({
+                  const launched = await runScrape({
                     platformId: inferred.platform,
                     keywords:   inferred.keywords,
                     maxResults: inferred.maxResults,
                   });
-                  onLaunched();
+                  onLaunched(launched);
                 } catch (e) {
                   setError(e instanceof Error ? e.message : "Failed to start scrape.");
                 } finally {
@@ -242,7 +265,7 @@ function InfRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RegularMode({ onLaunched }: { onLaunched: () => void }) {
+function RegularMode({ onLaunched }: { onLaunched: (s: ActiveScrape) => void }) {
   const [platform, setPlatform] = useState<string>("TikTok");
   const [keywords, setKeywords] = useState<string[]>(["skincare", "DTC"]);
   const [kwInput, setKwInput]   = useState("");
@@ -272,8 +295,8 @@ function RegularMode({ onLaunched }: { onLaunched: () => void }) {
     if (!keywords.length) { setError("Add at least one keyword."); return; }
     setRunning(true); setError(null);
     try {
-      await runScrape({ platformId: platform, keywords, maxResults: maxAds });
-      onLaunched();
+      const launched = await runScrape({ platformId: platform, keywords, maxResults: maxAds });
+      onLaunched(launched);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start scrape.");
     } finally {
@@ -854,7 +877,7 @@ function Td({ children, style }: { children: React.ReactNode; style?: React.CSSP
 }
 
 // ── Scrape runner (calls /api/discover) ───────────────────────
-async function runScrape({ platformId, keywords, maxResults }: { platformId: string; keywords: string[]; maxResults: number }) {
+async function runScrape({ platformId, keywords, maxResults }: { platformId: string; keywords: string[]; maxResults: number }): Promise<ActiveScrape> {
   const platform = PLATFORMS.find((p) => p.id === platformId);
   if (!platform || !platform.supported) throw new Error(`${platformId} is not supported.`);
   const keyword = keywords.join(" ");
@@ -874,7 +897,184 @@ async function runScrape({ platformId, keywords, maxResults }: { platformId: str
       ?? `Scrape failed (HTTP ${res.status}). ${text.slice(0, 200).trim() || "Empty response body."}`;
     throw new Error(msg);
   }
-  return res.json();
+  const data = await res.json() as { runId?: string; scrapeRunId?: string };
+  if (!data.runId || !data.scrapeRunId) {
+    throw new Error("Scrape started but server response was missing run identifiers.");
+  }
+  return {
+    runId:       data.runId,
+    scrapeRunId: data.scrapeRunId,
+    platform:    platform.id,
+    keyword,
+    maxResults,
+    startedAt:   Date.now(),
+  };
+}
+
+// ── SCRAPE PROGRESS PANEL ─────────────────────────────────────
+// Renders inline while a Bright Data snapshot is running. Polls /api/discover
+// every 2s so the user immediately sees the job is alive — addresses NWLA-27.
+function ScrapeProgressPanel({
+  scrape, onDismiss, onViewHistory,
+}: { scrape: ActiveScrape; onDismiss: () => void; onViewHistory: () => void }) {
+  type ProgressState = {
+    status:    string;
+    finished:  boolean;
+    succeeded?: boolean;
+    error?:    string;
+    stats?:    { records?: number; errors?: number; cost?: number };
+    itemCount?: number;
+  };
+  const [state, setState] = useState<ProgressState>({ status: "starting", finished: false });
+  const [elapsed, setElapsed] = useState(0);
+  const [stopped, setStopped] = useState(false);
+
+  // Tick elapsed time once per second.
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - scrape.startedAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [scrape.startedAt]);
+
+  // Poll BD progress every 2s until terminal (or user stops).
+  useEffect(() => {
+    if (stopped || state.finished) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/discover?runId=${encodeURIComponent(scrape.runId)}&scrapeRunId=${encodeURIComponent(scrape.scrapeRunId)}`);
+        const data = await res.json() as ProgressState & { items?: unknown[] };
+        if (cancelled) return;
+        setState({
+          status:    data.status ?? "unknown",
+          finished:  Boolean(data.finished),
+          succeeded: data.succeeded,
+          error:     data.error,
+          stats:     data.stats,
+          itemCount: data.itemCount ?? (Array.isArray(data.items) ? data.items.length : undefined),
+        });
+      } catch (e) {
+        if (cancelled) return;
+        setState((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Polling failed" }));
+      }
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [scrape.runId, scrape.scrapeRunId, stopped, state.finished]);
+
+  const records = state.stats?.records ?? 0;
+  const target  = Math.max(1, scrape.maxResults);
+  const pct     = state.finished && state.succeeded
+    ? 100
+    : Math.min(99, Math.round((records / target) * 100));
+  const isError = state.finished && !state.succeeded;
+  const isDone  = state.finished && state.succeeded;
+  const isRun   = !state.finished && !stopped;
+
+  const dotColor = isError ? T.red : isDone ? T.green : T.amber;
+  const headline = isError
+    ? `Scrape ${state.status} — see error below`
+    : isDone
+      ? `Scrape complete — ${state.itemCount ?? records} ad${(state.itemCount ?? records) === 1 ? "" : "s"} collected`
+      : stopped
+        ? "Polling stopped (scrape still runs on Bright Data)"
+        : "Scraping…";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="card" style={{ ...cardStyle(), borderColor: isError ? T.red : isDone ? T.green : T.accent }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: "50%", background: dotColor,
+            boxShadow: isRun ? `0 0 0 0 ${dotColor}` : undefined,
+            animation: isRun ? "scrapePulse 1.4s ease-in-out infinite" : undefined,
+          }} />
+          <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{headline}</div>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: T.text2, fontFamily: "var(--font-mono)" }}>
+            {formatElapsed(elapsed)}
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ position: "relative", height: 8, borderRadius: 4, background: T.bg3, overflow: "hidden", marginBottom: 10 }}>
+          {records > 0 || isDone ? (
+            <div style={{
+              position: "absolute", inset: 0, width: `${pct}%`,
+              background: isError ? T.red : isDone ? T.green : T.accent,
+              transition: "width 400ms ease",
+            }} />
+          ) : isRun ? (
+            <div style={{
+              position: "absolute", inset: 0,
+              background: `linear-gradient(90deg, transparent 0%, ${T.accent}80 50%, transparent 100%)`,
+              animation: "scrapeIndeterminate 1.6s linear infinite",
+            }} />
+          ) : null}
+        </div>
+
+        {/* Counters */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 10 }}>
+          <InfRow label="Platform" value={scrape.platform} />
+          <InfRow label="Keyword" value={scrape.keyword || "—"} />
+          <InfRow
+            label="Collected"
+            value={`${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`}
+          />
+          <InfRow label="Status" value={state.status} />
+        </div>
+
+        {/* Errors */}
+        {state.error && (
+          <div style={{
+            padding: "8px 10px", marginBottom: 10, borderRadius: 6,
+            background: T.rl, color: T.rd, fontSize: 11, fontFamily: "var(--font-mono)",
+            whiteSpace: "pre-wrap", wordBreak: "break-word",
+          }}>{state.error}</div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isRun && !stopped && (
+            <button onClick={() => setStopped(true)} style={btnStyle({})}>Stop polling</button>
+          )}
+          {(isDone || isError || stopped) && (
+            <button onClick={onViewHistory} style={btnStyle({ primary: true })}>View in Job history</button>
+          )}
+          <button onClick={onDismiss} style={btnStyle({})}>
+            {isDone || isError ? "Run another scrape" : "Hide panel"}
+          </button>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: T.text2 }}>
+            {isRun
+              ? "Polling Bright Data every 2 seconds…"
+              : isDone
+                ? "Results are saved to Job history. Use the Library tab to view and tag them."
+                : isError
+                  ? "Run did not complete. Adjust keywords and try again."
+                  : "Polling paused. The Bright Data snapshot continues in the background."}
+          </span>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        @keyframes scrapeIndeterminate {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes scrapePulse {
+          0%   { box-shadow: 0 0 0 0 ${T.amber}66; }
+          70%  { box-shadow: 0 0 0 8px ${T.amber}00; }
+          100% { box-shadow: 0 0 0 0 ${T.amber}00; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
 }
 
 // ── Fast-mode inference (rule-based v1) ───────────────────────
