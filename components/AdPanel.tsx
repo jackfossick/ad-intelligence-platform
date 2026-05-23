@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 // ── Select options ─────────────────────────────────────────────
 const HOOK_TYPES = ['audience_callout','shock_statement','curiosity_gap','problem_callout','transformation_claim','controversial_take','myth_busting','question_hook','visual_surprise','pain_point_hook','status_trigger','secret_reveal','mistake_warning','before_after'];
@@ -168,6 +169,8 @@ export default function AdPanel({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmOverwriteTags, setConfirmOverwriteTags] = useState(false);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const id = ad.id as string;
@@ -216,19 +219,8 @@ export default function AdPanel({
   }, [fields, id, onUpdate]);
 
   // ── AI Tag This Ad ─────────────────────────────────────────
-  const handleAiTag = useCallback(async () => {
-    const taggingStatus = fields.taggingStatus as string;
-    const hasManualTags =
-      taggingStatus === 'manual_tagged' ||
-      taggingStatus === 'human_reviewed' ||
-      !!(fields.hookExample) ||
-      !!(fields.creativeAngle);
-
-    if (hasManualTags) {
-      const ok = window.confirm('This ad already has manual tags. Overwrite them with AI-generated tags?');
-      if (!ok) return;
-    }
-
+  const performAiTag = useCallback(async () => {
+    setConfirmOverwriteTags(false);
     setAiLoading(true);
     setAiMessage(null);
 
@@ -356,12 +348,34 @@ export default function AdPanel({
     }
   }, [fields, id, onUpdate]);
 
+  const handleAiTag = useCallback(() => {
+    const taggingStatus = fields.taggingStatus as string;
+    const hasManualTags =
+      taggingStatus === 'manual_tagged' ||
+      taggingStatus === 'human_reviewed' ||
+      !!(fields.hookExample) ||
+      !!(fields.creativeAngle);
+    if (hasManualTags) {
+      setConfirmOverwriteTags(true);
+      return;
+    }
+    performAiTag();
+  }, [fields, performAiTag]);
+
   // ── Delete ─────────────────────────────────────────────────
-  const handleDelete = useCallback(async () => {
-    if (!confirm('Delete this ad? This cannot be undone.')) return;
+  const handleDelete = useCallback(() => {
+    setConfirmDelete(true);
+  }, []);
+
+  const performDelete = useCallback(async () => {
     setDeleting(true);
-    await fetch(`/api/ads/${id}`, { method: 'DELETE' });
-    onClose();
+    try {
+      await fetch(`/api/ads/${id}`, { method: 'DELETE' });
+      setConfirmDelete(false);
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
   }, [id, onClose]);
 
   const watchLink = (fields.adLink || fields.referenceUrl) as string | undefined;
@@ -638,6 +652,37 @@ export default function AdPanel({
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmOverwriteTags}
+        title="Overwrite manual tags?"
+        description={
+          <>
+            This ad already has <strong>manual or human-reviewed tags</strong>. Running AI tagging will
+            overwrite the existing hook, format, persona, and score fields. This cannot be undone.
+          </>
+        }
+        confirmLabel="Overwrite with AI tags"
+        destructive
+        loading={aiLoading}
+        onConfirm={performAiTag}
+        onCancel={() => setConfirmOverwriteTags(false)}
+      />
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete this ad?"
+        description={
+          <>
+            This will permanently delete this ad from the current database. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete ad"
+        destructive
+        loading={deleting}
+        onConfirm={performDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   );
 }

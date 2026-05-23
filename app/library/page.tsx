@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useDb } from "@/lib/db-context";
 import { normalise, platformBadgeClass, getYouTubeId } from "@/lib/normalise";
 import AdPanel from "@/components/AdPanel";
+import ConfirmModal from "@/components/ConfirmModal";
 
 type Ad = Record<string, unknown>;
 
@@ -330,7 +331,6 @@ function DetailedCard({
   onTagSingle: (ad: Ad) => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [tagging, setTagging] = useState(false);
 
   const n = normalise(ad);
@@ -354,12 +354,8 @@ function DetailedCard({
     setSaving(false);
   };
 
-  const handleDelete = async () => {
-    if (!confirm("Delete this ad? This cannot be undone.")) return;
-    setDeleting(true);
-    await fetch(`/api/ads/${ad.id}`, { method: "DELETE" });
+  const handleDelete = () => {
     onDelete(ad.id as string);
-    setDeleting(false);
   };
 
   const handleTagThis = async () => {
@@ -531,9 +527,8 @@ function DetailedCard({
         )}
         <button
           onClick={handleDelete}
-          disabled={deleting}
           style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid #D14040", color: "#D14040", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", marginLeft: "auto", whiteSpace: "nowrap" }}>
-          {deleting ? "Deleting…" : "🗑 Delete"}
+          🗑 Delete
         </button>
       </div>
     </div>
@@ -573,6 +568,10 @@ export default function LibraryPage() {
   const [bulkActing, setBulkActing] = useState<null | "useful" | "skip" | "mark_delete" | "hard_delete">(null);
   const [bulkActionMsg, setBulkActionMsg] = useState<string | null>(null);
 
+  // Confirm modals for destructive flows
+  const [confirmBulkHardDelete, setConfirmBulkHardDelete] = useState(false);
+  const [confirmSingleDeleteId, setConfirmSingleDeleteId] = useState<string | null>(null);
+
   const PAGE_SIZE = viewMode === "detailed" ? PAGE_SIZE_DETAILED : PAGE_SIZE_COMPACT;
 
   const fetchAds = useCallback(async () => {
@@ -598,8 +597,7 @@ export default function LibraryPage() {
   }, []);
 
   const handleDeleteSingle = useCallback((id: string) => {
-    setAllAds((prev) => prev.filter((a) => a.id !== id));
-    setSelected((prev) => prev && (prev.id as string) === id ? null : prev);
+    setConfirmSingleDeleteId(id);
   }, []);
 
   // Filter options
@@ -773,10 +771,9 @@ export default function LibraryPage() {
   const handleBulkMarkSkip   = () => runBulkPatch("skip",        { reviewStatus: "reviewed", usefulnessStatus: "uncertain" }, "Skipped");
   const handleBulkMarkDelete = () => runBulkPatch("mark_delete", { recommendedAction: "delete_candidate" },                   "Flagged for delete");
 
-  const handleBulkHardDelete = useCallback(async () => {
+  const performBulkHardDelete = useCallback(async () => {
     if (checkedIds.size === 0 || bulkActing) return;
     const ids = Array.from(checkedIds);
-    if (!confirm(`Delete ${ids.length} ad${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     setBulkActing("hard_delete");
     setBulkActionMsg(null);
     try {
@@ -804,8 +801,14 @@ export default function LibraryPage() {
       setBulkActionMsg(`Bulk delete failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBulkActing(null);
+      setConfirmBulkHardDelete(false);
     }
   }, [checkedIds, bulkActing]);
+
+  const handleBulkHardDelete = useCallback(() => {
+    if (checkedIds.size === 0 || bulkActing) return;
+    setConfirmBulkHardDelete(true);
+  }, [checkedIds.size, bulkActing]);
 
   const handleBulkDeleteConfirm = async () => {
     setDeleting(true);
@@ -939,23 +942,60 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {/* ── Delete modal ──────────────────────────────────────── */}
-      {confirmDelete && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "var(--color-background-primary)", borderRadius: 12, padding: 24, maxWidth: 400, width: "90%", border: "1px solid var(--color-border-secondary)", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Delete {toDeleteAds.length} ads?</h3>
-            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 16, lineHeight: 1.5 }}>
-              This includes all <strong>skipped</strong> and <strong>AI-flagged delete candidates</strong>. Cannot be undone.
-            </p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn btn-sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-              <button className="btn btn-sm" style={{ background: "#D14040", color: "white", border: "none" }} onClick={handleBulkDeleteConfirm} disabled={deleting}>
-                {deleting ? "Deleting…" : "Delete all"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Delete modals ─────────────────────────────────────── */}
+      <ConfirmModal
+        open={confirmDelete}
+        title={`Delete ${toDeleteAds.length} ad${toDeleteAds.length === 1 ? "" : "s"}?`}
+        description={
+          <>
+            This will permanently delete all <strong>{toDeleteAds.length}</strong> ad{toDeleteAds.length === 1 ? "" : "s"} flagged as
+            <strong> skipped</strong> or <strong>AI delete candidate</strong> from the current database. This cannot be undone.
+          </>
+        }
+        confirmLabel={`Delete ${toDeleteAds.length} ad${toDeleteAds.length === 1 ? "" : "s"}`}
+        destructive
+        loading={deleting}
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmModal
+        open={confirmBulkHardDelete}
+        title={`Delete ${checkedIds.size} selected ad${checkedIds.size === 1 ? "" : "s"}?`}
+        description={
+          <>
+            This will permanently delete the <strong>{checkedIds.size}</strong> selected ad{checkedIds.size === 1 ? "" : "s"} from the current database.
+            This cannot be undone.
+          </>
+        }
+        confirmLabel={`Delete ${checkedIds.size} ad${checkedIds.size === 1 ? "" : "s"}`}
+        destructive
+        loading={bulkActing === "hard_delete"}
+        onConfirm={performBulkHardDelete}
+        onCancel={() => setConfirmBulkHardDelete(false)}
+      />
+
+      <ConfirmModal
+        open={!!confirmSingleDeleteId}
+        title="Delete this ad?"
+        description={
+          <>
+            This will permanently delete the selected ad{confirmSingleDeleteId ? <> (<span style={{ fontFamily: "var(--font-mono)" }}>{confirmSingleDeleteId.slice(0, 8)}…</span>)</> : ""} from the current database.
+            This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete ad"
+        destructive
+        onConfirm={async () => {
+          const id = confirmSingleDeleteId;
+          if (!id) return;
+          await fetch(`/api/ads/${id}`, { method: "DELETE" });
+          setAllAds((prev) => prev.filter((a) => a.id !== id));
+          setSelected((prev) => (prev && prev.id === id ? null : prev));
+          setConfirmSingleDeleteId(null);
+        }}
+        onCancel={() => setConfirmSingleDeleteId(null)}
+      />
 
       {/* ── Status tabs ───────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14, borderBottom: "1px solid var(--color-border-tertiary)" }}>
@@ -1173,18 +1213,10 @@ export default function LibraryPage() {
 
 // ── Inline delete button (compact row) ────────────────────────
 function DeleteBtn({ adId, onDeleted }: { adId: string; onDeleted: (id: string) => void }) {
-  const [deleting, setDeleting] = useState(false);
-  const handleDelete = async () => {
-    if (!confirm("Delete this ad?")) return;
-    setDeleting(true);
-    await fetch(`/api/ads/${adId}`, { method: "DELETE" });
-    onDeleted(adId);
-    setDeleting(false);
-  };
   return (
-    <button onClick={handleDelete} disabled={deleting} title="Delete ad"
+    <button onClick={() => onDeleted(adId)} title="Delete ad"
       style={{ fontSize: 13, padding: "2px 6px", borderRadius: 6, border: "1px solid #FCA5A5", color: "#D14040", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-      {deleting ? "…" : "🗑"}
+      🗑
     </button>
   );
 }

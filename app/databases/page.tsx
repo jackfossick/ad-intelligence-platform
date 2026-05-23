@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useDb, type DbSummary } from "@/lib/db-context";
 import type { ValidationSummary } from "@/lib/schema-contract";
+import ConfirmModal from "@/components/ConfirmModal";
 
 // ── Design tokens (mirror board's design HTML) ─────────────────
 const T = {
@@ -89,6 +90,7 @@ export default function DatabasesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<DbSummary | null>(null);
 
   // Auto-expand active DB on mount
   useEffect(() => {
@@ -163,9 +165,13 @@ export default function DatabasesPage() {
     setActiveDbId(id);
   };
 
-  const handleDelete = async (db: DbSummary) => {
+  const requestDelete = (db: DbSummary) => {
     if (databases.length <= 1) { setDeleteError("Cannot delete the last database."); return; }
-    if (!window.confirm(`Delete "${db.name}" and all ${db.adCount} ads?\n\nThis cannot be undone.`)) return;
+    setDeleteError(null);
+    setConfirmDelete(db);
+  };
+
+  const handleDelete = async (db: DbSummary) => {
     setDeletingId(db.id); setDeleteError(null);
     const res = await fetch("/api/databases", {
       method: "DELETE",
@@ -174,11 +180,12 @@ export default function DatabasesPage() {
     });
     const data = await res.json() as { error?: string };
     setDeletingId(null);
-    if (!res.ok) { setDeleteError(data.error || "Failed to delete."); return; }
+    if (!res.ok) { setDeleteError(data.error || "Failed to delete."); setConfirmDelete(null); return; }
     if (activeDb?.id === db.id) {
       const next = databases.find((d) => d.id !== db.id);
       if (next) setActiveDbId(next.id);
     }
+    setConfirmDelete(null);
     await refreshDatabases();
   };
 
@@ -261,7 +268,7 @@ export default function DatabasesPage() {
                   onSetActive={() => handleSetActive(db.id)}
                   onRename={() => setRenamingId(db.id)}
                   onRenameDone={() => setRenamingId(null)}
-                  onDelete={() => handleDelete(db)}
+                  onDelete={() => requestDelete(db)}
                 />
               );
             })}
@@ -270,6 +277,23 @@ export default function DatabasesPage() {
       )}
 
       {modalOpen && <NewDbModal onClose={() => setModalOpen(false)} />}
+
+      <ConfirmModal
+        open={!!confirmDelete}
+        title={confirmDelete ? `Delete "${confirmDelete.name}"?` : ""}
+        description={confirmDelete && (
+          <>
+            This will permanently remove the <strong>{confirmDelete.name}</strong> database
+            and all <strong>{confirmDelete.adCount.toLocaleString()}</strong> ad{confirmDelete.adCount === 1 ? "" : "s"} inside it.
+            This cannot be undone.
+          </>
+        )}
+        confirmLabel="Delete database"
+        destructive
+        loading={!!deletingId && deletingId === confirmDelete?.id}
+        onConfirm={() => { if (confirmDelete) handleDelete(confirmDelete); }}
+        onCancel={() => setConfirmDelete(null)}
+      />
 
       <p style={{ marginTop: 20, fontSize: 11, color: T.text2, lineHeight: 1.6 }}>
         The <strong style={{ color: T.text }}>active database</strong> is used across Collect, Library, Validate, and Export.
