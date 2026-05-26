@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     maxResults = 20,
     country = "US",
     databaseId,
+    intent,
   } = body as {
     platform?:   string;
     actor?:      string;
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
     maxResults?: number;
     country?:    string;
     databaseId?: string;
+    intent?:     "keyword" | "handle" | "competitor_url";
   };
 
   // Accept either the new `platform` field or the legacy `actor` string from clients
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
 
   let snapshotId: string;
   try {
-    ({ snapshotId } = await triggerSnapshot(platform, { keyword, maxResults, country }));
+    ({ snapshotId } = await triggerSnapshot(platform, { keyword, maxResults, country, intent }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Bright Data trigger failed" }, { status: 502 });
   }

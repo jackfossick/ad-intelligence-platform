@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDb } from "@/lib/db-context";
+import type { ParsedQuery, QueryIntent } from "@/lib/queryParse";
+import { fallbackParse, termForBrightData } from "@/lib/queryParse";
+import type { SupportedPlatform } from "@/lib/brightData";
 
 // ── Design tokens (mirror docs/design.html) ───────────────────
 const T = {
@@ -29,10 +32,10 @@ const FORMATS = ["All formats", "UGC only", "Talking head", "Product demo", "Sli
 const LANGS   = ["English", "Spanish", "French", "Any"];
 
 const EXAMPLES = [
-  '"50 TikTok UGC skincare ads targeting Gen Z"',
-  '"Meta supplement ads using social proof hooks"',
-  '"YouTube fitness ads, curiosity gap, last 30 days"',
-  '"100 DTC ads all platforms, problem-first hook"',
+  '"weight loss before and after on tiktok"',
+  '"@gymshark on tiktok"',
+  '"100 fitness ads in last 30 days"',
+  '"facebook ads from athleanx"',
 ];
 
 type Tab = "scrape" | "history" | "import" | "tagging";
@@ -168,15 +171,116 @@ function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) 
 function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape) => void }) {
   const { activeDb } = useDb();
   const [text, setText] = useState("");
-  const inferred = useMemo(() => inferFromText(text), [text]);
+  const [parsed, setParsed] = useState<ParsedQuery | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Debounced LLM parse — fires 600ms after the user stops typing, only when
+  // the input is long enough to be meaningful. The fallback parse runs
+  // instantly so the UI never feels empty while we wait for the LLM.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reqIdRef = useRef(0);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = text.trim();
+    if (trimmed.length < 4) {
+      setParsed(null);
+      setParseError(null);
+      return;
+    }
+    // Show the rule-based fallback immediately while the LLM call is queued
+    // so the user sees something within one frame of typing.
+    setParsed((prev) => prev?.rawText === trimmed ? prev : fallbackParse(trimmed));
+    setParseError(null);
+
+    debounceRef.current = setTimeout(async () => {
+      const myReq = ++reqIdRef.current;
+      setParsing(true);
+      try {
+        const res = await fetch("/api/parse-query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: trimmed }),
+        });
+        const data = await res.json() as ParsedQuery | { error?: string };
+        if (myReq !== reqIdRef.current) return; // stale response
+        if (!res.ok || !("intent" in data)) {
+          setParseError(("error" in data && data.error) || "Parse failed");
+          return;
+        }
+        setParsed(data);
+      } catch (e) {
+        if (myReq !== reqIdRef.current) return;
+        setParseError(e instanceof Error ? e.message : "Parse failed");
+      } finally {
+        if (myReq === reqIdRef.current) setParsing(false);
+      }
+    }, 600);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [text]);
+
+  // User-editable overrides applied on top of the parsed plan.
+  const [override, setOverride] = useState<{
+    platform?: SupportedPlatform;
+    term?: string;
+    maxResults?: number;
+  }>({});
+
+  // Reset overrides whenever the parser produces a *new* parse (different rawText).
+  const lastRawTextRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!parsed) return;
+    if (lastRawTextRef.current !== parsed.rawText) {
+      lastRawTextRef.current = parsed.rawText;
+      setOverride({});
+    }
+  }, [parsed]);
+
+  const finalPlan = useMemo(() => {
+    if (!parsed) return null;
+    return {
+      ...parsed,
+      platform: override.platform ?? parsed.platform,
+      term:     override.term ?? parsed.term,
+      maxResults: override.maxResults ?? parsed.maxResults,
+    };
+  }, [parsed, override]);
+
+  const onRun = async () => {
+    if (!finalPlan) return;
+    if (!activeDb) {
+      setError("No active database. Open Databases and pick one before scraping.");
+      return;
+    }
+    if (!finalPlan.term.trim()) {
+      setError("Search term is empty. Edit the term or rephrase the query.");
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    try {
+      const launched = await runScrapeWithPlan({
+        plan: finalPlan,
+        databaseId:   activeDb.id,
+        databaseName: activeDb.name,
+      });
+      onLaunched(launched);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start scrape.");
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <div style={{ fontSize: 11, fontWeight: 500, color: T.text2, marginBottom: 8 }}>
-          Describe your scrape — keywords + platform + filters
+          Describe your scrape — platform, handle, or keywords. Plain English.
         </div>
         <div style={{ display: "flex", alignItems: "stretch", border: `1.5px solid ${T.accent}`, borderRadius: 12, background: T.bg2, padding: 10, gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg, #6C3FB5, ${T.accent})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -186,7 +290,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
           </div>
           <textarea
             value={text} onChange={(e) => setText(e.target.value)}
-            placeholder='e.g. "Find 50 TikTok UGC ads about skincare for Gen Z" or "Get Meta ads in the supplement space with social proof hooks"'
+            placeholder='e.g. "weight loss before and after on tiktok" or "@gymshark on instagram" or "100 facebook ads from athleanx"'
             rows={2}
             style={{ flex: 1, border: "none", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: 13, color: T.text, background: "transparent", padding: 4 }}
           />
@@ -206,20 +310,118 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
         </div>
       </div>
 
-      {/* Inferred preview */}
-      {text.trim().length > 8 && (
+      {/* Parser preview / confirmation card */}
+      {finalPlan && (
         <div style={{ border: `1px solid ${T.accent}40`, background: T.al, borderRadius: 10, padding: "12px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: T.ad }}>Inferred parameters — review before running</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: T.ad }}>
+              We&apos;ll scrape — review before running
+            </span>
+            {parsing && (
+              <span style={{ fontSize: 10, color: T.text2, marginLeft: 8 }}>refining parse…</span>
+            )}
+            <span style={{ marginLeft: "auto", fontSize: 10, color: T.text2 }}>
+              parsed via {finalPlan.source === "llm" ? "AI" : "rule-based fallback"}
+            </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 12 }}>
-            <InfRow label="Platform"  value={inferred.platform ?? "—"} />
-            <InfRow label="Keywords"  value={inferred.keywords.length ? inferred.keywords.join(", ") : "—"} />
-            <InfRow label="Max ads"   value={String(inferred.maxResults)} />
-            <InfRow label="Hook"      value={inferred.hook ?? "any"} />
-            <InfRow label="Format"    value={inferred.format ?? "any"} />
-            <InfRow label="Date range" value={inferred.dateRange ?? "last 30 days"} />
+
+          {/* Reasoning */}
+          <div style={{ fontSize: 11, color: T.text, marginBottom: 10, lineHeight: 1.4 }}>
+            {finalPlan.reasoning}
           </div>
+
+          {/* Warnings */}
+          {finalPlan.warnings.length > 0 && (
+            <div style={{
+              padding: "8px 10px", marginBottom: 10, borderRadius: 6,
+              background: T.ambl, color: "#854F0B", fontSize: 11, lineHeight: 1.5,
+            }}>
+              {finalPlan.warnings.map((w, i) => (
+                <div key={i} style={{ marginTop: i === 0 ? 0 : 6 }}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Editable parsed fields */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 12 }}>
+            <EditableRow label="Platform">
+              <select
+                value={finalPlan.platform}
+                onChange={(e) => setOverride((o) => ({ ...o, platform: e.target.value as SupportedPlatform }))}
+                style={{
+                  width: "100%", padding: "4px 6px", borderRadius: 5,
+                  border: `1px solid ${T.border}`, background: T.bg2,
+                  fontSize: 12, color: T.text, fontFamily: "inherit",
+                }}
+              >
+                {(["TikTok", "Instagram", "Meta", "YouTube"] as const).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </EditableRow>
+            <EditableRow label={intentLabel(finalPlan.intent)}>
+              <input
+                type="text"
+                value={finalPlan.term}
+                onChange={(e) => setOverride((o) => ({ ...o, term: e.target.value }))}
+                style={{
+                  width: "100%", padding: "4px 6px", borderRadius: 5,
+                  border: `1px solid ${T.border}`, background: T.bg2,
+                  fontSize: 12, color: T.text, fontFamily: "inherit", outline: "none",
+                }}
+              />
+            </EditableRow>
+            <EditableRow label="Max ads">
+              <input
+                type="number" min={10} max={500} step={10}
+                value={finalPlan.maxResults}
+                onChange={(e) => {
+                  const n = Math.max(10, Math.min(500, Number(e.target.value) || 100));
+                  setOverride((o) => ({ ...o, maxResults: n }));
+                }}
+                style={{
+                  width: "100%", padding: "4px 6px", borderRadius: 5,
+                  border: `1px solid ${T.border}`, background: T.bg2,
+                  fontSize: 12, color: T.text, fontFamily: "inherit", outline: "none",
+                }}
+              />
+            </EditableRow>
+            <InfRow label="Intent"     value={finalPlan.intent.replace(/_/g, " ")} />
+            <InfRow label="Country"    value={finalPlan.country} />
+            <InfRow
+              label="Date range"
+              value={finalPlan.dateRangeDays ? `last ${finalPlan.dateRangeDays} days` : "—"}
+            />
+          </div>
+
+          {finalPlan.alsoConsider.length > 0 && (
+            <div style={{ fontSize: 11, color: T.text2, marginBottom: 10 }}>
+              <span style={{ marginRight: 6 }}>Also try:</span>
+              {finalPlan.alsoConsider.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setOverride((o) => ({ ...o, platform: p }))}
+                  style={{
+                    padding: "2px 8px", marginRight: 4, borderRadius: 999,
+                    background: T.bg2, border: `1px solid ${T.border2}`,
+                    color: T.text, fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {parseError && (
+            <div style={{
+              padding: "8px 10px", marginBottom: 8, borderRadius: 6,
+              background: T.rl, color: T.rd, fontSize: 11,
+            }}>
+              Parse refinement failed: {parseError}. Using fallback parse above — review carefully.
+            </div>
+          )}
+
           {error && (
             <div style={{
               padding: "8px 10px", marginBottom: 8, borderRadius: 6,
@@ -227,42 +429,44 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
               whiteSpace: "pre-wrap", wordBreak: "break-word",
             }}>{error}</div>
           )}
+
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              onClick={async () => {
-                if (!inferred.platform || !inferred.keywords.length) return;
-                if (!activeDb) {
-                  setError("No active database. Open Databases and pick one before scraping.");
-                  return;
-                }
-                setRunning(true); setError(null);
-                try {
-                  const launched = await runScrape({
-                    platformId:   inferred.platform,
-                    keywords:     inferred.keywords,
-                    maxResults:   inferred.maxResults,
-                    databaseId:   activeDb.id,
-                    databaseName: activeDb.name,
-                  });
-                  onLaunched(launched);
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : "Failed to start scrape.");
-                } finally {
-                  setRunning(false);
-                }
-              }}
-              disabled={running || !inferred.platform || !inferred.keywords.length || !activeDb}
-              style={btnStyle({ primary: true, disabled: running || !inferred.platform || !inferred.keywords.length || !activeDb })}
+              onClick={onRun}
+              disabled={running || !finalPlan.term.trim() || !activeDb}
+              style={btnStyle({ primary: true, disabled: running || !finalPlan.term.trim() || !activeDb })}
             >
-              {running ? "Starting…" : "Run with these parameters"}
+              {running ? "Starting…" : `Run ${finalPlan.platform} scrape`}
             </button>
             <button onClick={onSwitchToRegular} style={btnStyle({})}>Edit in regular mode</button>
-            <span style={{ fontSize: 11, color: T.text2, marginLeft: "auto" }}>Not right? Switch to regular mode</span>
+            <span style={{ fontSize: 11, color: T.text2, marginLeft: "auto" }}>
+              {finalPlan.source === "llm" ? "AI-parsed" : "Rule-based parse"} · edit any field above
+            </span>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function EditableRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: T.bg2, padding: "6px 10px", borderRadius: 6, border: `1px solid ${T.border}` }}>
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T.text2, marginBottom: 4 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function intentLabel(intent: QueryIntent): string {
+  switch (intent) {
+    case "handle":         return "Handle";
+    case "keyword":        return "Keyword";
+    case "category":       return "Category";
+    case "competitor_url": return "URL";
+  }
 }
 
 function InfRow({ label, value }: { label: string; value: string }) {
@@ -912,10 +1116,55 @@ async function runScrape({
     throw new Error("No active database selected. Pick one in Databases before scraping.");
   }
   const keyword = keywords.join(" ");
+  return dispatchScrape({
+    platform: platform.id,
+    keyword,
+    maxResults,
+    databaseId,
+    databaseName,
+    country: "US",
+    intent: "keyword",
+  });
+}
+
+async function runScrapeWithPlan({
+  plan, databaseId, databaseName,
+}: {
+  plan:         ParsedQuery;
+  databaseId:   string;
+  databaseName: string;
+}): Promise<ActiveScrape> {
+  if (!databaseId) {
+    throw new Error("No active database selected. Pick one in Databases before scraping.");
+  }
+  const keyword = termForBrightData(plan);
+  if (!keyword) throw new Error("Parsed search term is empty.");
+  return dispatchScrape({
+    platform:     plan.platform,
+    keyword,
+    maxResults:   plan.maxResults,
+    databaseId,
+    databaseName,
+    country:      plan.country,
+    intent:       plan.intent === "category" ? "keyword" : plan.intent,
+  });
+}
+
+async function dispatchScrape({
+  platform, keyword, maxResults, databaseId, databaseName, country, intent,
+}: {
+  platform:     string;
+  keyword:      string;
+  maxResults:   number;
+  databaseId:   string;
+  databaseName: string;
+  country:      string;
+  intent:       "keyword" | "handle" | "competitor_url";
+}): Promise<ActiveScrape> {
   const res = await fetch("/api/discover", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US", databaseId }),
+    body: JSON.stringify({ platform, keyword, maxResults, country, databaseId, intent }),
   });
   if (!res.ok) {
     // The server should always return JSON. If it doesn't (HTML 500 from an
@@ -935,7 +1184,7 @@ async function runScrape({
   return {
     runId:       data.runId,
     scrapeRunId: data.scrapeRunId,
-    platform:    platform.id,
+    platform,
     keyword,
     maxResults,
     startedAt:   Date.now(),
@@ -1116,63 +1365,6 @@ function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
-}
-
-// ── Fast-mode inference (rule-based v1) ───────────────────────
-function inferFromText(text: string): {
-  platform: string | null;
-  keywords: string[];
-  maxResults: number;
-  hook: string | null;
-  format: string | null;
-  dateRange: string | null;
-} {
-  const t = text.toLowerCase();
-  // Default to TikTok when no platform is explicitly mentioned. Without a
-  // default the "Run" button stays silently disabled for any natural-language
-  // query that doesn't name a platform, which reads as "Fast mode is broken".
-  const platform =
-    /tiktok/.test(t) ? "TikTok" :
-    /instagram|insta\b|\big\b/.test(t) ? "Instagram" :
-    /meta|facebook/.test(t) ? "Meta" :
-    /youtube|yt/.test(t) ? "YouTube" :
-    "TikTok";
-  const numMatch = t.match(/\b(\d{1,4})\b/);
-  const maxResults = numMatch ? Math.max(10, Math.min(500, Number(numMatch[1]))) : 100;
-  const hook =
-    /problem.?first/.test(t) ? "Problem-first" :
-    /curiosity/.test(t)      ? "Curiosity gap" :
-    /social.?proof/.test(t)  ? "Social proof" :
-    /direct.?offer/.test(t)  ? "Direct offer" :
-    /story/.test(t)          ? "Story open" : null;
-  const format =
-    /ugc/.test(t)           ? "UGC" :
-    /talking.?head/.test(t) ? "Talking head" :
-    /demo/.test(t)          ? "Product demo" :
-    /slideshow/.test(t)     ? "Slideshow" : null;
-  const dateRange =
-    /last\s*30/.test(t)  ? "last 30 days" :
-    /last\s*7/.test(t)   ? "last 7 days"  :
-    /last\s*90/.test(t)  ? "last 90 days" : null;
-
-  // Keywords: pull noun-ish words, drop the platform/numbers/filter words
-  const stop = new Set([
-    "tiktok", "meta", "facebook", "instagram", "youtube", "yt",
-    "ads", "ad", "the", "with", "for", "of", "in", "on", "from", "and", "or",
-    "find", "get", "scrape", "all", "platforms", "ugc",
-    "social", "proof", "curiosity", "gap", "problem", "first", "direct",
-    "offer", "story", "open", "talking", "head", "demo", "slideshow",
-    "last", "days", "hook", "hooks", "month", "week",
-  ]);
-  const keywords = Array.from(new Set(
-    text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !stop.has(w) && !/^\d+$/.test(w))
-  )).slice(0, 5);
-
-  return { platform, keywords, maxResults, hook, format, dateRange };
 }
 
 // ── Style helpers ─────────────────────────────────────────────
