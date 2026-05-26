@@ -171,47 +171,60 @@ function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) 
 function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape) => void }) {
   const { activeDb } = useDb();
   const [text, setText] = useState("");
-  const [parsed, setParsed] = useState<ParsedQuery | null>(null);
+  const [llmParsed, setLlmParsed] = useState<ParsedQuery | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounced LLM parse — fires 600ms after the user stops typing, only when
-  // the input is long enough to be meaningful. The fallback parse runs
-  // instantly so the UI never feels empty while we wait for the LLM.
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // User-editable overrides applied on top of the parsed plan. Keyed by raw
+  // text so that typing a new query clears stale overrides automatically
+  // (no extra effect needed — derived in finalPlan below).
+  const [override, setOverride] = useState<{
+    rawText: string;
+    platform?: SupportedPlatform;
+    term?: string;
+    maxResults?: number;
+  } | null>(null);
+
+  // Synchronous fallback parse for the current input. Always derived from
+  // `text` — no setState needed, no cascading renders, no flash of empty
+  // state while the LLM call is in flight.
+  const trimmed = text.trim();
+  const fallbackParsed = useMemo<ParsedQuery | null>(
+    () => (trimmed.length >= 4 ? fallbackParse(trimmed) : null),
+    [trimmed],
+  );
+
+  // Prefer the LLM result iff it matches the *current* trimmed text. Stale
+  // LLM responses for previous inputs are ignored automatically.
+  const parsed: ParsedQuery | null =
+    llmParsed && llmParsed.rawText === trimmed ? llmParsed : fallbackParsed;
+
+  // Debounced LLM parse — fires 600ms after the user stops typing. setState
+  // calls live inside the async callback (not the effect body), so the
+  // "set-state-in-effect" rule isn't triggered.
   const reqIdRef = useRef(0);
-
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    const trimmed = text.trim();
-    if (trimmed.length < 4) {
-      setParsed(null);
-      setParseError(null);
-      return;
-    }
-    // Show the rule-based fallback immediately while the LLM call is queued
-    // so the user sees something within one frame of typing.
-    setParsed((prev) => prev?.rawText === trimmed ? prev : fallbackParse(trimmed));
-    setParseError(null);
-
-    debounceRef.current = setTimeout(async () => {
-      const myReq = ++reqIdRef.current;
-      setParsing(true);
+    if (trimmed.length < 4) return;
+    const myReq = ++reqIdRef.current;
+    const id = setTimeout(async () => {
       try {
         const res = await fetch("/api/parse-query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: trimmed }),
         });
+        if (myReq !== reqIdRef.current) return;
+        setParsing(true);
         const data = await res.json() as ParsedQuery | { error?: string };
-        if (myReq !== reqIdRef.current) return; // stale response
+        if (myReq !== reqIdRef.current) return;
         if (!res.ok || !("intent" in data)) {
           setParseError(("error" in data && data.error) || "Parse failed");
-          return;
+        } else {
+          setLlmParsed(data);
+          setParseError(null);
         }
-        setParsed(data);
       } catch (e) {
         if (myReq !== reqIdRef.current) return;
         setParseError(e instanceof Error ? e.message : "Parse failed");
@@ -219,36 +232,27 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
         if (myReq === reqIdRef.current) setParsing(false);
       }
     }, 600);
-
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [text]);
-
-  // User-editable overrides applied on top of the parsed plan.
-  const [override, setOverride] = useState<{
-    platform?: SupportedPlatform;
-    term?: string;
-    maxResults?: number;
-  }>({});
-
-  // Reset overrides whenever the parser produces a *new* parse (different rawText).
-  const lastRawTextRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!parsed) return;
-    if (lastRawTextRef.current !== parsed.rawText) {
-      lastRawTextRef.current = parsed.rawText;
-      setOverride({});
-    }
-  }, [parsed]);
+    return () => { clearTimeout(id); };
+  }, [trimmed]);
 
   const finalPlan = useMemo(() => {
     if (!parsed) return null;
+    const matches = override && override.rawText === parsed.rawText;
     return {
       ...parsed,
-      platform: override.platform ?? parsed.platform,
-      term:     override.term ?? parsed.term,
-      maxResults: override.maxResults ?? parsed.maxResults,
+      platform:   matches ? (override.platform   ?? parsed.platform)   : parsed.platform,
+      term:       matches ? (override.term       ?? parsed.term)       : parsed.term,
+      maxResults: matches ? (override.maxResults ?? parsed.maxResults) : parsed.maxResults,
     };
   }, [parsed, override]);
+
+  const setOverrideField = (k: "platform" | "term" | "maxResults", v: string | number) => {
+    if (!parsed) return;
+    setOverride((prev) => {
+      const base = prev && prev.rawText === parsed.rawText ? prev : { rawText: parsed.rawText };
+      return { ...base, [k]: v };
+    });
+  };
 
   const onRun = async () => {
     if (!finalPlan) return;
@@ -347,7 +351,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             <EditableRow label="Platform">
               <select
                 value={finalPlan.platform}
-                onChange={(e) => setOverride((o) => ({ ...o, platform: e.target.value as SupportedPlatform }))}
+                onChange={(e) => setOverrideField("platform", e.target.value as SupportedPlatform)}
                 style={{
                   width: "100%", padding: "4px 6px", borderRadius: 5,
                   border: `1px solid ${T.border}`, background: T.bg2,
@@ -363,7 +367,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
               <input
                 type="text"
                 value={finalPlan.term}
-                onChange={(e) => setOverride((o) => ({ ...o, term: e.target.value }))}
+                onChange={(e) => setOverrideField("term", e.target.value)}
                 style={{
                   width: "100%", padding: "4px 6px", borderRadius: 5,
                   border: `1px solid ${T.border}`, background: T.bg2,
@@ -377,7 +381,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                 value={finalPlan.maxResults}
                 onChange={(e) => {
                   const n = Math.max(10, Math.min(500, Number(e.target.value) || 100));
-                  setOverride((o) => ({ ...o, maxResults: n }));
+                  setOverrideField("maxResults", n);
                 }}
                 style={{
                   width: "100%", padding: "4px 6px", borderRadius: 5,
@@ -400,7 +404,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
               {finalPlan.alsoConsider.map((p) => (
                 <button
                   key={p}
-                  onClick={() => setOverride((o) => ({ ...o, platform: p }))}
+                  onClick={() => setOverrideField("platform", p)}
                   style={{
                     padding: "2px 8px", marginRight: 4, borderRadius: 999,
                     background: T.bg2, border: `1px solid ${T.border2}`,
