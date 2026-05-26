@@ -62,6 +62,8 @@ type ActiveScrape = {
   keyword:     string;
   maxResults:  number;
   startedAt:   number;
+  databaseId:  string;   // Ad database to persist scraped rows into
+  databaseName: string;
 };
 
 // ── Page ──────────────────────────────────────────────────────
@@ -164,6 +166,7 @@ function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) 
 }
 
 function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape) => void }) {
+  const { activeDb } = useDb();
   const [text, setText] = useState("");
   const inferred = useMemo(() => inferFromText(text), [text]);
   const [running, setRunning] = useState(false);
@@ -228,12 +231,18 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             <button
               onClick={async () => {
                 if (!inferred.platform || !inferred.keywords.length) return;
+                if (!activeDb) {
+                  setError("No active database. Open Databases and pick one before scraping.");
+                  return;
+                }
                 setRunning(true); setError(null);
                 try {
                   const launched = await runScrape({
-                    platformId: inferred.platform,
-                    keywords:   inferred.keywords,
-                    maxResults: inferred.maxResults,
+                    platformId:   inferred.platform,
+                    keywords:     inferred.keywords,
+                    maxResults:   inferred.maxResults,
+                    databaseId:   activeDb.id,
+                    databaseName: activeDb.name,
                   });
                   onLaunched(launched);
                 } catch (e) {
@@ -242,8 +251,8 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                   setRunning(false);
                 }
               }}
-              disabled={running || !inferred.platform || !inferred.keywords.length}
-              style={btnStyle({ primary: true, disabled: running || !inferred.platform || !inferred.keywords.length })}
+              disabled={running || !inferred.platform || !inferred.keywords.length || !activeDb}
+              style={btnStyle({ primary: true, disabled: running || !inferred.platform || !inferred.keywords.length || !activeDb })}
             >
               {running ? "Starting…" : "Run with these parameters"}
             </button>
@@ -266,6 +275,7 @@ function InfRow({ label, value }: { label: string; value: string }) {
 }
 
 function RegularMode({ onLaunched }: { onLaunched: (s: ActiveScrape) => void }) {
+  const { activeDb } = useDb();
   const [platform, setPlatform] = useState<string>("TikTok");
   const [keywords, setKeywords] = useState<string[]>(["skincare", "DTC"]);
   const [kwInput, setKwInput]   = useState("");
@@ -293,9 +303,19 @@ function RegularMode({ onLaunched }: { onLaunched: (s: ActiveScrape) => void }) 
 
   const onRun = async () => {
     if (!keywords.length) { setError("Add at least one keyword."); return; }
+    if (!activeDb) {
+      setError("No active database. Open Databases and pick one before scraping.");
+      return;
+    }
     setRunning(true); setError(null);
     try {
-      const launched = await runScrape({ platformId: platform, keywords, maxResults: maxAds });
+      const launched = await runScrape({
+        platformId:   platform,
+        keywords,
+        maxResults:   maxAds,
+        databaseId:   activeDb.id,
+        databaseName: activeDb.name,
+      });
       onLaunched(launched);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start scrape.");
@@ -877,14 +897,25 @@ function Td({ children, style }: { children: React.ReactNode; style?: React.CSSP
 }
 
 // ── Scrape runner (calls /api/discover) ───────────────────────
-async function runScrape({ platformId, keywords, maxResults }: { platformId: string; keywords: string[]; maxResults: number }): Promise<ActiveScrape> {
+async function runScrape({
+  platformId, keywords, maxResults, databaseId, databaseName,
+}: {
+  platformId:   string;
+  keywords:     string[];
+  maxResults:   number;
+  databaseId:   string;
+  databaseName: string;
+}): Promise<ActiveScrape> {
   const platform = PLATFORMS.find((p) => p.id === platformId);
   if (!platform || !platform.supported) throw new Error(`${platformId} is not supported.`);
+  if (!databaseId) {
+    throw new Error("No active database selected. Pick one in Databases before scraping.");
+  }
   const keyword = keywords.join(" ");
   const res = await fetch("/api/discover", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US" }),
+    body: JSON.stringify({ platform: platform.id, keyword, maxResults, country: "US", databaseId }),
   });
   if (!res.ok) {
     // The server should always return JSON. If it doesn't (HTML 500 from an
@@ -908,6 +939,8 @@ async function runScrape({ platformId, keywords, maxResults }: { platformId: str
     keyword,
     maxResults,
     startedAt:   Date.now(),
+    databaseId,
+    databaseName,
   };
 }
 
@@ -924,6 +957,7 @@ function ScrapeProgressPanel({
     error?:    string;
     stats?:    { records?: number; errors?: number; cost?: number };
     itemCount?: number;
+    persisted?: { imported: number; deduped: number; skipped: number; failed: number };
   };
   const [state, setState] = useState<ProgressState>({ status: "starting", finished: false });
   const [elapsed, setElapsed] = useState(0);
@@ -941,7 +975,7 @@ function ScrapeProgressPanel({
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/discover?runId=${encodeURIComponent(scrape.runId)}&scrapeRunId=${encodeURIComponent(scrape.scrapeRunId)}`);
+        const res = await fetch(`/api/discover?runId=${encodeURIComponent(scrape.runId)}&scrapeRunId=${encodeURIComponent(scrape.scrapeRunId)}&databaseId=${encodeURIComponent(scrape.databaseId)}`);
         const data = await res.json() as ProgressState & { items?: unknown[] };
         if (cancelled) return;
         setState({
@@ -951,6 +985,7 @@ function ScrapeProgressPanel({
           error:     data.error,
           stats:     data.stats,
           itemCount: data.itemCount ?? (Array.isArray(data.items) ? data.items.length : undefined),
+          persisted: data.persisted,
         });
       } catch (e) {
         if (cancelled) return;
@@ -960,7 +995,7 @@ function ScrapeProgressPanel({
     poll();
     const id = setInterval(poll, 2000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [scrape.runId, scrape.scrapeRunId, stopped, state.finished]);
+  }, [scrape.runId, scrape.scrapeRunId, scrape.databaseId, stopped, state.finished]);
 
   const records = state.stats?.records ?? 0;
   const target  = Math.max(1, scrape.maxResults);
@@ -972,10 +1007,11 @@ function ScrapeProgressPanel({
   const isRun   = !state.finished && !stopped;
 
   const dotColor = isError ? T.red : isDone ? T.green : T.amber;
+  const importedCount = state.persisted?.imported ?? state.itemCount ?? records;
   const headline = isError
     ? `Scrape ${state.status} — see error below`
     : isDone
-      ? `Scrape complete — ${state.itemCount ?? records} ad${(state.itemCount ?? records) === 1 ? "" : "s"} collected`
+      ? `Scrape complete — ${importedCount} ad${importedCount === 1 ? "" : "s"} saved to ${scrape.databaseName}`
       : stopped
         ? "Polling stopped (scrape still runs on Bright Data)"
         : "Scraping…";
@@ -1014,12 +1050,17 @@ function ScrapeProgressPanel({
         </div>
 
         {/* Counters */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 10 }}>
           <InfRow label="Platform" value={scrape.platform} />
           <InfRow label="Keyword" value={scrape.keyword || "—"} />
+          <InfRow label="Database" value={scrape.databaseName} />
           <InfRow
-            label="Collected"
-            value={`${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`}
+            label={isDone ? "Saved" : "Collected"}
+            value={
+              isDone && state.persisted
+                ? `${state.persisted.imported} saved · ${state.persisted.deduped} dupe${state.persisted.deduped === 1 ? "" : "s"}`
+                : `${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`
+            }
           />
           <InfRow label="Status" value={state.status} />
         </div>
@@ -1048,7 +1089,7 @@ function ScrapeProgressPanel({
             {isRun
               ? "Polling Bright Data every 2 seconds…"
               : isDone
-                ? "Results are saved to Job history. Use the Library tab to view and tag them."
+                ? `Rows persisted into ${scrape.databaseName}. Use the Library tab to view and tag them.`
                 : isError
                   ? "Run did not complete. Adjust keywords and try again."
                   : "Polling paused. The Bright Data snapshot continues in the background."}
