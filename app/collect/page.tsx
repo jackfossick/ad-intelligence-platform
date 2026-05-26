@@ -274,6 +274,16 @@ function InfRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function BreakdownCell({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "good" | "warn" | "neutral" }) {
+  const color = tone === "good" ? T.gd : tone === "warn" ? "#633806" : T.text;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T.text2 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, color, lineHeight: 1.1 }}>{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
 function RegularMode({ onLaunched }: { onLaunched: (s: ActiveScrape) => void }) {
   const { activeDb } = useDb();
   const [platform, setPlatform] = useState<string>("TikTok");
@@ -1049,7 +1059,7 @@ function ScrapeProgressPanel({
           ) : null}
         </div>
 
-        {/* Counters */}
+        {/* Counters — at-a-glance */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 10 }}>
           <InfRow label="Platform" value={scrape.platform} />
           <InfRow label="Keyword" value={scrape.keyword || "—"} />
@@ -1058,12 +1068,40 @@ function ScrapeProgressPanel({
             label={isDone ? "Saved" : "Collected"}
             value={
               isDone && state.persisted
-                ? `${state.persisted.imported} saved · ${state.persisted.deduped} dupe${state.persisted.deduped === 1 ? "" : "s"}`
+                ? `${state.persisted.imported} / ${state.stats?.records ?? records}`
                 : `${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`
             }
           />
           <InfRow label="Status" value={state.status} />
         </div>
+
+        {/* Persisted breakdown — full outcome accounting so success is never silent */}
+        {isDone && state.persisted && (
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8,
+            fontSize: 11, marginBottom: 10,
+            padding: "10px 12px", background: T.bg3, borderRadius: 8,
+          }}>
+            <BreakdownCell label="Scraped"  value={state.stats?.records ?? records} />
+            <BreakdownCell label="Inserted" value={state.persisted.imported} tone={state.persisted.imported > 0 ? "good" : "warn"} />
+            <BreakdownCell label="Deduped"  value={state.persisted.deduped} />
+            <BreakdownCell label="Dropped"  value={state.persisted.skipped + state.persisted.failed} tone={(state.persisted.skipped + state.persisted.failed) > 0 ? "warn" : "neutral"} />
+          </div>
+        )}
+
+        {/* Zero-import warning — explains why a "successful" scrape produced nothing visible */}
+        {isDone && state.persisted && state.persisted.imported === 0 && (state.stats?.records ?? records) > 0 && (
+          <div style={{
+            padding: "8px 10px", marginBottom: 10, borderRadius: 6,
+            background: T.ambl, color: "#633806", fontSize: 11,
+          }}>
+            <strong>Scrape returned {state.stats?.records ?? records} row{(state.stats?.records ?? records) === 1 ? "" : "s"} but nothing landed in {scrape.databaseName}:</strong>{" "}
+            {state.persisted.deduped > 0 && <>{state.persisted.deduped} matched existing URLs (deduped). </>}
+            {state.persisted.failed > 0 && <>{state.persisted.failed} failed normalization or insert. </>}
+            {state.persisted.skipped > 0 && <>{state.persisted.skipped} were skipped (missing required fields). </>}
+            Switch active DB or try a different keyword.
+          </div>
+        )}
 
         {/* Errors */}
         {state.error && (
@@ -1079,8 +1117,13 @@ function ScrapeProgressPanel({
           {isRun && !stopped && (
             <button onClick={() => setStopped(true)} style={btnStyle({})}>Stop polling</button>
           )}
+          {isDone && state.persisted && state.persisted.imported > 0 && (
+            <a href="/library" style={{ ...btnStyle({ primary: true }), textDecoration: "none" }}>
+              Open in Library ({state.persisted.imported})
+            </a>
+          )}
           {(isDone || isError || stopped) && (
-            <button onClick={onViewHistory} style={btnStyle({ primary: true })}>View in Job history</button>
+            <button onClick={onViewHistory} style={btnStyle({})}>View in Job history</button>
           )}
           <button onClick={onDismiss} style={btnStyle({})}>
             {isDone || isError ? "Run another scrape" : "Hide panel"}
@@ -1089,7 +1132,9 @@ function ScrapeProgressPanel({
             {isRun
               ? "Polling Bright Data every 2 seconds…"
               : isDone
-                ? `Rows persisted into ${scrape.databaseName}. Use the Library tab to view and tag them.`
+                ? state.persisted && state.persisted.imported > 0
+                  ? `${state.persisted.imported} row${state.persisted.imported === 1 ? "" : "s"} persisted into ${scrape.databaseName}.`
+                  : `Run finished but nothing landed in ${scrape.databaseName} — see breakdown above.`
                 : isError
                   ? "Run did not complete. Adjust keywords and try again."
                   : "Polling paused. The Bright Data snapshot continues in the background."}
