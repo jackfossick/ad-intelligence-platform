@@ -65,30 +65,55 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
  *
  * To present a uniform keyword UI we synthesize the right URL/handle for
  * each platform from the user's keyword input:
- *   - TikTok → https://www.tiktok.com/search?q={keyword}
- *   - Meta   → https://www.facebook.com/ads/library/?…&q={keyword}…
- *   - YouTube → keyword passed straight through
- *   - Instagram → keyword treated as a username (UI labels this clearly)
+ *   - TikTok keyword → https://www.tiktok.com/search?q={keyword}
+ *   - TikTok handle  → https://www.tiktok.com/@{handle}
+ *   - Meta           → https://www.facebook.com/ads/library/?…&q={keyword}…
+ *   - YouTube        → keyword passed straight through
+ *   - Instagram      → keyword/handle treated as a username (UI labels this clearly)
+ *
+ * `intent` lets the caller distinguish "@gymshark" (profile discover URL)
+ * from "weight loss" (keyword search URL) for TikTok. Defaults to "keyword"
+ * for backward compatibility.
  */
+export type BrightDataIntent = "keyword" | "handle" | "competitor_url";
+
 function buildTrigger(
   platform: SupportedPlatform,
-  opts: { keyword: string; maxResults: number; country: string },
+  opts: { keyword: string; maxResults: number; country: string; intent?: BrightDataIntent },
 ): { body: Record<string, unknown>[]; query: string } {
-  const { keyword, country } = opts;
+  const { keyword, country, intent = "keyword" } = opts;
   const term = keyword.replace(/^#/, "").trim();
   switch (platform) {
-    case "TikTok":
+    case "TikTok": {
+      // For handle intent, synthesize a profile-page URL so BD discovers from
+      // the creator's feed rather than a generic search SERP. For competitor
+      // URLs, pass the URL through verbatim (BD will scrape it directly).
+      let searchUrl: string;
+      if (intent === "competitor_url" && /^https?:\/\//i.test(term)) {
+        searchUrl = term;
+      } else if (intent === "handle") {
+        const cleanHandle = term.replace(/^@/, "");
+        searchUrl = `https://www.tiktok.com/@${encodeURIComponent(cleanHandle)}`;
+      } else {
+        searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(term)}`;
+      }
       return {
-        body: [{ search_url: `https://www.tiktok.com/search?q=${encodeURIComponent(term)}`, country }],
+        body: [{ search_url: searchUrl, country }],
         query: "&type=discover_new&discover_by=search_url",
       };
+    }
     case "YouTube":
       return {
         body: [{ keyword: term, country }],
         query: "&type=discover_new&discover_by=keyword",
       };
     case "Meta": {
-      const url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(term)}&search_type=keyword_exact_phrase`;
+      // Meta dataset can take either a search URL or a page-id URL. For handle
+      // intent we synthesise a page-name search; the underlying crawl_error
+      // (NWLA-23) is not specific to either path.
+      const url = intent === "handle"
+        ? `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(term.replace(/^@/, ""))}&search_type=page`
+        : `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(term)}&search_type=keyword_exact_phrase`;
       return {
         body: [{ url }],
         query: "", // Meta dataset has no discovery collector — direct trigger only
@@ -107,7 +132,7 @@ function buildTrigger(
 
 export async function triggerSnapshot(
   platform: SupportedPlatform,
-  opts: { keyword: string; maxResults: number; country: string },
+  opts: { keyword: string; maxResults: number; country: string; intent?: BrightDataIntent },
 ): Promise<{ snapshotId: string; datasetId: string }> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("BRIGHT_DATA_API_KEY not set in environment.");
