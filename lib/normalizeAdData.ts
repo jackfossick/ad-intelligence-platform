@@ -116,6 +116,18 @@ function validUrl(s: string | null): string | null {
   return t;
 }
 
+function inferPlatformFromUrl(...urls: (string | null | undefined)[]): string | null {
+  for (const u of urls) {
+    if (!u) continue;
+    const lower = u.toLowerCase();
+    if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "YouTube";
+    if (lower.includes("tiktok.com")) return "TikTok";
+    if (lower.includes("instagram.com")) return "Instagram";
+    if (lower.includes("facebook.com") || lower.includes("fb.com")) return "Meta";
+  }
+  return null;
+}
+
 // ── Apify-specific field extraction ─────────────────────────────
 
 function extractApifyInstagram(raw: RawAd): Partial<NormalizedAdInput> {
@@ -342,13 +354,22 @@ export function normalizeAdData(
   if (source === "apify" && opts.actor) {
     extracted = extractApifyFields(raw, opts.actor);
   } else if (source === "brightdata") {
-    const plat = opts.platform ?? String(raw.platform ?? "");
+    let plat = opts.platform ?? String(raw.platform ?? "");
+    if (!plat) {
+      plat = inferPlatformFromUrl(
+        str(raw, "referenceUrl", "source_url", "sourceUrl", "url", "video_url", "ad_url", "ad_library_url")
+      ) ?? "";
+    }
     if (plat) extracted = extractBrightDataFields(raw, plat);
   }
 
   // Generic field mapping (Claude Chrome + CSV + fallback)
   const platform = extracted.platform ??
-    str(raw, "platform", "source_platform", "sourcePlatform", "network") ?? null;
+    str(raw, "platform", "source_platform", "sourcePlatform", "network") ??
+    inferPlatformFromUrl(
+      str(raw, "referenceUrl", "source_url", "sourceUrl", "url", "video_url",
+          "ad_url", "adUrl", "ad_library_url", "adLibraryUrl", "permalink")
+    ) ?? null;
 
   const referenceUrl = extracted.referenceUrl ?? validUrl(
     str(raw, "source_url", "sourceUrl", "url", "ad_url", "adUrl",
