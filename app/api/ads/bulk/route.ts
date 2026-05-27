@@ -85,6 +85,7 @@ export async function DELETE(req: NextRequest) {
  *   source          IngestionSource
  *   actor?          string
  *   keyword?        string
+ *   platform?       string                       (required for "brightdata" source)
  *   dedupeStrategy? "skip" | "update" | "none"   (default: "skip")
  *
  * Returns:
@@ -97,10 +98,11 @@ export async function POST(req: NextRequest) {
     source: IngestionSource;
     actor?: string;
     keyword?: string;
+    platform?: string;
     dedupeStrategy?: DedupeStrategy;
   };
 
-  const { databaseId, items, source, actor, keyword } = body;
+  const { databaseId, items, source, actor, keyword, platform } = body;
 
   if (!databaseId)
     return NextResponse.json({ error: "databaseId is required" }, { status: 400 });
@@ -116,6 +118,7 @@ export async function POST(req: NextRequest) {
       source,
       actor,
       keyword,
+      platform,
       dedupeStrategy: body.dedupeStrategy,
     });
     return NextResponse.json(result);
