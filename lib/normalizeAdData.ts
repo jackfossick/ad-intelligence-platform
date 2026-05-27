@@ -454,9 +454,26 @@ export function normalizeAdData(
   // Require at least one real usable URL
   if (!referenceUrl && !creativeVideoUrl && !creativeImageUrl && !adLibraryUrl) return null;
 
-  // Lightweight raw payload (cap at 2 KB to avoid bloating the DB)
+  // Lightweight raw payload (cap at 2 KB to avoid bloating the DB).
+  // Truncate on a safe boundary — naive .slice() can cut inside a JSON
+  // \uXXXX escape, which makes Prisma reject the row (NWLA-39).
   const rawJson = JSON.stringify(raw);
-  const rawSourcePayload = rawJson.length <= 2048 ? rawJson : rawJson.slice(0, 2048) + "…";
+  let rawSourcePayload = rawJson;
+  if (rawJson.length > 2048) {
+    let end = 2048;
+    let bs = 0;
+    while (end - 1 - bs >= 0 && rawJson[end - 1 - bs] === "\\") bs++;
+    if (bs % 2 === 1) end--;
+    const tail = rawJson.slice(Math.max(0, end - 5), end);
+    const m = tail.match(/\\u[0-9a-fA-F]{0,3}$/);
+    if (m) {
+      const pos = end - m[0].length;
+      let pbs = 0;
+      while (pos - 1 - pbs >= 0 && rawJson[pos - 1 - pbs] === "\\") pbs++;
+      if (pbs % 2 === 0) end = pos;
+    }
+    rawSourcePayload = rawJson.slice(0, end) + "…";
+  }
 
   return {
     platform,
