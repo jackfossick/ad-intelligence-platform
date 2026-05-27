@@ -50,7 +50,7 @@ export default function ValidatePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/export?databaseId=${dbId}&validate=1`);
+      const res = await fetch(`/api/export?databaseId=${dbId}&summary=1`);
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { summary: ValidationSummary; preview: RowValidationResult[] };
       setSummary(data.summary);

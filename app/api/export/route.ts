@@ -97,8 +97,9 @@ export async function GET(req: NextRequest) {
   const databaseId  = searchParams.get("databaseId") || "";
   const format      = (searchParams.get("format") || "csv").toLowerCase();
   const preview     = searchParams.get("preview") === "1";
-  const validateOnly = searchParams.get("validate") === "1";
-  const validOnly   = searchParams.get("validOnly") === "1"; // export only rows without hard errors
+  const summary     = searchParams.get("summary") === "1";
+  const validate    = searchParams.get("validate") === "1";
+  const validOnly   = searchParams.get("validOnly") === "1" || validate; // validate=1 implies valid-only export
 
   const ads = await prisma.ad.findMany({
     where: databaseId ? { databaseId } : {},
@@ -108,20 +109,18 @@ export async function GET(req: NextRequest) {
 
   const adObjects = ads as unknown as Record<string, unknown>[];
 
-  // ── Validate ──────────────────────────────────────────────
-  if (validateOnly || preview) {
+  // ── Validation summary ────────────────────────────────────
+  if (summary || preview) {
     const results = adObjects.map(validateRow);
-    const summary = summariseValidation(results);
-    // ?preview=1 → 10 rows for the export-page snippet.
-    // ?validate=1 → full row set so the Validate page can render every record.
-    const limit = preview && !validateOnly ? 10 : results.length;
+    const validationSummary = summariseValidation(results);
+    const limit = preview && !summary ? 10 : results.length;
     const rows = results.slice(0, limit).map((r) => ({
       id: r.id,
       blocked: r.blocked,
       issues: r.issues,
       row: r.row,
     }));
-    return NextResponse.json({ summary, preview: rows });
+    return NextResponse.json({ summary: validationSummary, preview: rows });
   }
 
   // ── Filter to valid only if requested ─────────────────────

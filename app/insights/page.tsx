@@ -156,7 +156,7 @@ export default function InsightsPage() {
     try {
       const [adsRes, valRes] = await Promise.all([
         fetch(`/api/ads?databaseId=${dbId}`),
-        fetch(`/api/export?databaseId=${dbId}&validate=1`),
+        fetch(`/api/export?databaseId=${dbId}&summary=1`),
       ]);
       const adsData = await adsRes.json() as { ads: Ad[] };
       const valData = await valRes.json() as { summary: ValidationSummary };
