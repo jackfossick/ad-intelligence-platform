@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   normalizeAdData,
+  expandBrightDataRow,
   type IngestionSource,
   type RawAd,
 } from "@/lib/normalizeAdData";
@@ -83,12 +84,24 @@ export async function persistRawAds(opts: PersistOptions): Promise<PersistResult
     }
   }
 
+  // Expand BD profile-level rows into per-post/video rows
+  const expandedItems = (source === "brightdata" && platform)
+    ? items.flatMap(item => expandBrightDataRow(item, platform))
+    : items;
+
+  if (expandedItems.length !== items.length) {
+    await prisma.importJob.update({
+      where: { id: job.id },
+      data: { totalRows: expandedItems.length },
+    });
+  }
+
   let imported = 0;
   let skipped  = 0;
   let deduped  = 0;
   const errors: string[] = [];
 
-  for (const raw of items) {
+  for (const raw of expandedItems) {
     try {
       const normalized = normalizeAdData(raw, source, {
         actor:    actor ?? undefined,
