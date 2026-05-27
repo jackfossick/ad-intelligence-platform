@@ -198,6 +198,12 @@ export async function GET(req: NextRequest) {
     fetchError = e instanceof Error ? e.message : "snapshot fetch failed";
   }
 
+  if (!fetchError && items.length === 0 && (stats.records ?? 0) > 0) {
+    fetchError =
+      `Snapshot fetch returned 0 items but Bright Data reports ${stats.records} records` +
+      ` — likely timed out or exceeded response size limit. Retry from Job History.`;
+  }
+
   // No databaseId provided — preserve legacy behavior (return items in the
   // response, do not persist). Used by the legacy /discover page which has
   // its own client-side save flow.
