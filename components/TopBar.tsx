@@ -163,7 +163,7 @@ function HealthPill() {
   const load = useCallback(async () => {
     if (!activeDb) { setSummary(null); return; }
     try {
-      const res = await fetch(`/api/export?databaseId=${activeDb.id}&validate=1`);
+      const res = await fetch(`/api/export?databaseId=${activeDb.id}&summary=1`);
       if (!res.ok) return;
       const data = await res.json() as { summary: ValidationSummary };
       setSummary(data.summary ?? null);
