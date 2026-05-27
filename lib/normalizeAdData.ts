@@ -269,11 +269,30 @@ function extractBrightDataInstagram(raw: RawAd): Partial<NormalizedAdInput> {
   };
 }
 
+function extractBrightDataYouTube(raw: RawAd): Partial<NormalizedAdInput> {
+  return {
+    platform:         "YouTube",
+    externalId:       str(raw, "id", "video_id"),
+    referenceUrl:     validUrl(str(raw, "video_url", "url")),
+    creativeVideoUrl: validUrl(str(raw, "video_url", "url")),
+    thumbnailUrl:     validUrl(str(raw, "preview_image", "thumbnail_url", "thumbnail")),
+    brandOrCreator:   str(raw, "youtuber", "handle_name", "channel_name", "author"),
+    advertiserPageUrl: validUrl(str(raw, "channel_url")),
+    headline:         str(raw, "title"),
+    adCopy:           str(raw, "description"),
+    views:            num(raw, "views", "view_count"),
+    likes:            num(raw, "likes", "like_count"),
+    comments:         num(raw, "num_comments", "comment_count", "comments"),
+    firstSeen:        date(raw, "date_posted", "upload_date", "published_at"),
+  };
+}
+
 export function extractBrightDataFields(raw: RawAd, platform: string): Partial<NormalizedAdInput> {
   const p = platform.toLowerCase();
   if (p.includes("tiktok"))    return extractBrightDataTikTok(raw);
   if (p.includes("meta") || p.includes("facebook")) return extractBrightDataMeta(raw);
   if (p.includes("instagram")) return extractBrightDataInstagram(raw);
+  if (p.includes("youtube"))   return extractBrightDataYouTube(raw);
   return {};
 }
 
