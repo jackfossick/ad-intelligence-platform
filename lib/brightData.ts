@@ -195,7 +195,10 @@ export async function fetchSnapshotItems(snapshotId: string): Promise<Record<str
   if (Array.isArray((data as { data?: unknown[] }).data)) {
     return (data as { data: Record<string, unknown>[] }).data;
   }
-  return [];
+  throw new Error(
+    `Bright Data snapshot response has unrecognised shape (expected array or {data: [...]}). ` +
+    `Response keys: ${typeof data === "object" && data ? Object.keys(data).join(", ") : typeof data}`,
+  );
 }
 
 /** True/false/null mapping of BD progress.status to "is run finished" terminal flag. */
