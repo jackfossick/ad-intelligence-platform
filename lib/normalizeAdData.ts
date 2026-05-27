@@ -207,24 +207,26 @@ export function extractApifyFields(raw: RawAd, actor: string): Partial<Normalize
 // TikTok / Meta-Ad-Library / Instagram datasets we use.
 
 function extractBrightDataTikTok(raw: RawAd): Partial<NormalizedAdInput> {
-  // BD's TikTok dataset returns *profile-level* rows (not flat videos) with
-  // nested `top_videos[]` / `top_posts_data[]` arrays. Map the profile-level
-  // fields here; the first top_video supplies the creative video URL.
   const topVideos = (raw.top_videos as Array<Record<string, unknown>> | undefined) ?? [];
   const v0 = topVideos[0] ?? {};
+  const videoId = str(v0, "id", "video_id");
+  const username = str(raw, "unique_id", "account_id");
+  const videoPageUrl = validUrl(str(v0, "url"))
+    ?? (videoId && username ? validUrl(`https://www.tiktok.com/@${username}/video/${videoId}`) : null);
   return {
     platform:         "TikTok",
-    externalId:       str(raw, "account_id", "id"),
-    referenceUrl:     validUrl(str(raw, "url")),
+    externalId:       str(raw, "_expanded_id") ?? (videoId ? `${str(raw, "account_id", "id") ?? "unknown"}_v_${videoId}` : null) ?? str(raw, "account_id", "id"),
+    referenceUrl:     videoPageUrl ?? validUrl(str(raw, "url")),
+    advertiserPageUrl: validUrl(str(raw, "url")),
     creativeVideoUrl: validUrl(str(v0, "video_url", "download_url")),
-    thumbnailUrl:     validUrl(str(raw, "profile_pic_url_hd", "profile_pic_url") ?? str(v0, "cover")),
+    thumbnailUrl:     validUrl(str(v0, "cover")) ?? validUrl(str(raw, "profile_pic_url_hd", "profile_pic_url")),
     brandOrCreator:   str(raw, "nickname", "account_id"),
-    adCopy:           str(raw, "biography", "signature") ?? str(v0, "description"),
+    adCopy:           str(v0, "description") ?? str(raw, "biography", "signature"),
     views:            num(v0, "playcount", "play_count"),
-    likes:            num(raw, "likes", "like_count", "digg_count"),
+    likes:            num(v0, "like_count", "digg_count") ?? num(raw, "likes", "like_count", "digg_count"),
     comments:         num(v0, "commentcount", "comment_count"),
     shares:           num(v0, "share_count"),
-    firstSeen:        date(raw, "create_time"),
+    firstSeen:        date(v0, "create_time") ?? date(raw, "create_time"),
   };
 }
 
@@ -250,18 +252,20 @@ function extractBrightDataMeta(raw: RawAd): Partial<NormalizedAdInput> {
 }
 
 function extractBrightDataInstagram(raw: RawAd): Partial<NormalizedAdInput> {
-  // BD's IG dataset (discover_by=user_name) returns profile-level rows with a
-  // nested `posts[]` array, similar shape to the TikTok dataset.
   const posts = (raw.posts as Array<Record<string, unknown>> | undefined) ?? [];
   const p0 = posts[0] ?? {};
+  const shortcode = str(p0, "shortcode", "code");
+  const postRefUrl = validUrl(str(p0, "url", "link"))
+    ?? (shortcode ? validUrl(`https://www.instagram.com/p/${shortcode}/`) : null);
   return {
     platform:         "Instagram",
-    externalId:       str(raw, "id", "fbid"),
-    referenceUrl:     validUrl(str(raw, "profile_url", "url")),
+    externalId:       str(raw, "_expanded_id") ?? str(p0, "id", "pk") ?? str(raw, "id", "fbid"),
+    referenceUrl:     postRefUrl ?? validUrl(str(raw, "profile_url", "url")),
+    advertiserPageUrl: validUrl(str(raw, "profile_url", "url")),
     creativeVideoUrl: validUrl(str(p0, "video_url", "media_url")),
-    thumbnailUrl:     validUrl(str(raw, "profile_image_link") ?? str(p0, "display_url", "thumbnail_url")),
+    thumbnailUrl:     validUrl(str(p0, "display_url", "thumbnail_url")) ?? validUrl(str(raw, "profile_image_link")),
     brandOrCreator:   str(raw, "full_name", "account", "profile_name"),
-    adCopy:           str(raw, "biography") ?? str(p0, "caption"),
+    adCopy:           str(p0, "caption") ?? str(raw, "biography"),
     likes:            num(p0, "like_count", "likes"),
     comments:         num(p0, "comment_count", "comments"),
     views:            num(p0, "video_play_count", "play_count"),
@@ -285,6 +289,36 @@ function extractBrightDataYouTube(raw: RawAd): Partial<NormalizedAdInput> {
     comments:         num(raw, "num_comments", "comment_count", "comments"),
     firstSeen:        date(raw, "date_posted", "upload_date", "published_at"),
   };
+}
+
+/**
+ * Expand a single BD profile-level row into N rows — one per nested post/video.
+ * Meta and YouTube rows are already flat and pass through unchanged.
+ */
+export function expandBrightDataRow(raw: RawAd, platform: string): RawAd[] {
+  const p = platform.toLowerCase();
+
+  if (p.includes("instagram")) {
+    const posts = (raw.posts as Array<Record<string, unknown>> | undefined) ?? [];
+    if (posts.length <= 1) return [raw];
+    return posts.map((post, i) => ({
+      ...raw,
+      posts: [post],
+      _expanded_id: `${str(raw, "id", "fbid") ?? "unknown"}_p_${str(post as RawAd, "id", "pk") ?? i}`,
+    }));
+  }
+
+  if (p.includes("tiktok")) {
+    const topVideos = (raw.top_videos as Array<Record<string, unknown>> | undefined) ?? [];
+    if (topVideos.length <= 1) return [raw];
+    return topVideos.map((video, i) => ({
+      ...raw,
+      top_videos: [video],
+      _expanded_id: `${str(raw, "account_id", "id") ?? "unknown"}_v_${str(video as RawAd, "id", "video_id") ?? i}`,
+    }));
+  }
+
+  return [raw];
 }
 
 export function extractBrightDataFields(raw: RawAd, platform: string): Partial<NormalizedAdInput> {
