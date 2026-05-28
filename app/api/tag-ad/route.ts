@@ -104,10 +104,10 @@ const EVIDENCE_FIELDS = [
 
 export async function POST(req: NextRequest) {
   // ── Guard: API key must be set server-side ──────────────────────────────────
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.PIF_OPENAI_KEY ?? process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY is not configured on the server. Add it to your .env file." },
+      { error: "OPENAI_API_KEY (or PIF_OPENAI_KEY) is not configured on the server." },
       { status: 500 }
     );
   }
