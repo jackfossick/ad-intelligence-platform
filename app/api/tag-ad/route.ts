@@ -1,4 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  HOOK_TYPES,
+  CREATIVE_ANGLES,
+  CREATIVE_FORMATS,
+  CREATIVE_BUCKETS,
+  AWARENESS_STAGES,
+  USEFULNESS_STATUSES,
+  RECOMMENDED_ACTIONS,
+  isValidEnum,
+} from "@/lib/enums";
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are an expert short-form ad creative analyst and strategist.
@@ -75,14 +85,74 @@ Return a JSON object with EXACTLY these fields:
   "recommended_action": ""
 }
 
-For hook_type use one of: audience_callout, shock_statement, curiosity_gap, problem_callout, transformation_claim, controversial_take, myth_busting, question_hook, visual_surprise, pain_point_hook, status_trigger, secret_reveal, mistake_warning, before_after
-For creative_angle use one of: problem_solution, before_after, testimonial, product_demo, founder_story, myth_busting, comparison, educational_breakdown, ugc_recommendation, objection_handling, trend_adaptation, lifestyle_aspiration, social_proof, contrarian_take, personal_confession, mistake_correction
+IMPORTANT: hook_type and creative_angle are DIFFERENT fields with DIFFERENT enums. Do not mix them.
+- hook_type = the *opening device* in the first ~3 seconds (how the ad grabs attention).
+- creative_angle = the *overall narrative framing* of the whole ad (the persuasion strategy).
+Examples of correct pairing:
+- An ad opening "If you're a busy mum…" then framed as a customer success story → hook_type: audience_callout, creative_angle: testimonial
+- An ad opening with a glamorous lifestyle shot then framed around aspiration → hook_type: visual_surprise, creative_angle: lifestyle_aspiration
+- An ad opening "Most people get this wrong…" then explaining how → hook_type: myth_busting, creative_angle: educational_breakdown
+Never use a creative_angle value (e.g. lifestyle_aspiration, testimonial, problem_solution) as a hook_type. Never invent values outside the listed enums.
+
+For hook_type use exactly one of: audience_callout, shock_statement, curiosity_gap, problem_callout, transformation_claim, controversial_take, myth_busting, question_hook, visual_surprise, pain_point_hook, status_trigger, secret_reveal, mistake_warning, before_after
+For creative_angle use exactly one of: problem_solution, before_after, testimonial, product_demo, founder_story, myth_busting, comparison, educational_breakdown, ugc_recommendation, objection_handling, trend_adaptation, lifestyle_aspiration, social_proof, contrarian_take, personal_confession, mistake_correction
 For creative_format use one of: talking_head, ugc_selfie, product_demo, screen_recording, skit, montage, before_after, unboxing, tutorial, reaction, customer_footage, meme_format, polished_brand_ad, ai_avatar, text_overlay_only, comment_reply
 For creative_bucket use one of: copy_this, learn_from_this, watchlist, reject
 For awareness_stage use one of: unaware, problem_aware, solution_aware, product_aware, most_aware
 For usefulness_status use one of: useful, not_useful, uncertain
 For recommended_action use one of: keep, review, delete_candidate
 usefulness_confidence is 0-100 (how confident you are in the usefulness_status)`;
+
+// ── Enum guard ────────────────────────────────────────────────────────────────
+// GPT-4o occasionally cross-pollinates between hook_type and creative_angle
+// (NWLA-47). For known cross-pollination cases we map to the nearest valid
+// HOOK_TYPES value; otherwise we null out invalid enum values so they never
+// reach the DB as enum violations.
+const HOOK_TYPE_CROSS_POLLINATION: Record<string, string> = {
+  lifestyle_aspiration:   "audience_callout",
+  aspirational_statement: "audience_callout",
+  testimonial:            "audience_callout",
+  social_proof:           "audience_callout",
+  problem_solution:       "problem_callout",
+  educational_breakdown:  "curiosity_gap",
+  contrarian_take:        "controversial_take",
+  personal_confession:    "secret_reveal",
+  mistake_correction:     "mistake_warning",
+};
+
+const ENUM_FIELDS: { field: string; enumList: readonly string[] }[] = [
+  { field: "hook_type",          enumList: HOOK_TYPES },
+  { field: "creative_angle",     enumList: CREATIVE_ANGLES },
+  { field: "creative_format",    enumList: CREATIVE_FORMATS },
+  { field: "creative_bucket",    enumList: CREATIVE_BUCKETS },
+  { field: "awareness_stage",    enumList: AWARENESS_STAGES },
+  { field: "usefulness_status",  enumList: USEFULNESS_STATUSES },
+  { field: "recommended_action", enumList: RECOMMENDED_ACTIONS },
+];
+
+function sanitizeEnums(result: Record<string, unknown>): {
+  cleaned: Record<string, unknown>;
+  corrections: { field: string; from: string; to: string | null }[];
+} {
+  const cleaned = { ...result };
+  const corrections: { field: string; from: string; to: string | null }[] = [];
+
+  for (const { field, enumList } of ENUM_FIELDS) {
+    const raw = cleaned[field];
+    if (raw == null || raw === "") continue;
+    if (isValidEnum(raw, enumList)) continue;
+
+    const rawStr = String(raw);
+    let mapped: string | null = null;
+    if (field === "hook_type" && HOOK_TYPE_CROSS_POLLINATION[rawStr]) {
+      mapped = HOOK_TYPE_CROSS_POLLINATION[rawStr];
+    }
+    cleaned[field] = mapped ?? "";
+    corrections.push({ field, from: rawStr, to: mapped });
+  }
+
+  return { cleaned, corrections };
+}
 
 // ── Evidence fields — only these are forwarded from the ad ────────────────────
 const EVIDENCE_FIELDS = [
@@ -187,5 +257,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ result });
+  const { cleaned, corrections } = sanitizeEnums(result);
+  if (corrections.length > 0) {
+    console.warn("[tag-ad] enum corrections applied", corrections);
+  }
+
+  return NextResponse.json({ result: cleaned, corrections });
 }
