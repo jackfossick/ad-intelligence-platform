@@ -183,15 +183,26 @@ model Ad {
 }
 
 model ScrapeRun {
-  id          String   @id @default(uuid())
-  actor       String
-  keyword     String?
-  platform    String?
-  status      String
-  rowCount    Int?
-  cost        Float?
-  rawDataPath String?
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  actor        String
+  keyword      String?
+  platform     String?
+  status       String
+  rowCount     Int?
+  cost         Float?
+  rawDataPath  String?
+
+  // Request-side params persisted for audit (NWLA-49). Lets /api/jobs show
+  // the exact inputs that produced a snapshot — country, intent, the
+  // requested cap, and the literal BD trigger URL/body we sent.
+  maxResults   Int?
+  country      String?
+  intent       String?
+  databaseId   String?
+  triggerUrl   String?
+  triggerBody  String?  // JSON
+
+  createdAt    DateTime @default(now())
 }
 
 model ImportJob {

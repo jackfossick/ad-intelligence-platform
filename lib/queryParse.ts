@@ -153,6 +153,16 @@ export function fallbackParse(rawText: string): ParsedQuery {
       "The request will reach BD but is expected to fail until that is fixed.",
     );
   }
+  // NWLA-49: BD's Instagram dataset takes a username with no country field,
+  // so any country the user specified will be silently ignored. Surface it
+  // upfront instead of letting the result set look country-correct.
+  const fbCountry = extractCountry(text);
+  if (platform === "Instagram" && fbCountry !== "US") {
+    warnings.push(
+      `Instagram scrape ignores the country filter ("${fbCountry}") — BD's IG dataset only takes a username. ` +
+      `Results will be unfiltered by country.`,
+    );
+  }
 
   let intent: QueryIntent;
   let term: string;
@@ -239,6 +249,12 @@ export function sanitiseLLMResult(
     warnings.push(
       "Meta scraping currently fails with a Bright Data crawl_error — see NWLA-23. " +
       "The job will still launch so you can see the failure surfaced cleanly.",
+    );
+  }
+  if (platform === "Instagram" && country !== "US" && !warnings.some((w) => /country/i.test(w))) {
+    warnings.push(
+      `Instagram scrape ignores the country filter ("${country}") — BD's IG dataset only takes a username. ` +
+      `Results will be unfiltered by country.`,
     );
   }
 

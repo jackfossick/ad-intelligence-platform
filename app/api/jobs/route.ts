@@ -27,6 +27,12 @@ export type JobEntry = {
   rowCount?:    number;
   cost?:        number;
   errors?:      string[];
+  // NWLA-49: request-side audit fields for scrape kind.
+  maxResults?:  number;
+  country?:     string;
+  intent?:      string;
+  triggerUrl?:  string;
+  triggerBody?: unknown;
   createdAt:    string;
   completedAt?: string;
 };
@@ -45,18 +51,31 @@ export async function GET(req: NextRequest) {
   ]);
 
   const entries: JobEntry[] = [
-    ...scrapeRuns.map((r) => ({
-      id:         r.id,
-      kind:       "scrape" as const,
-      source:     "brightdata",
-      status:     r.status,
-      keyword:    r.keyword ?? undefined,
-      actor:      r.actor,
-      platform:   r.platform ?? undefined,
-      rowCount:   r.rowCount ?? undefined,
-      cost:       r.cost ?? undefined,
-      createdAt:  r.createdAt.toISOString(),
-    })),
+    ...scrapeRuns.map((r) => {
+      let triggerBody: unknown = undefined;
+      if (r.triggerBody) {
+        try { triggerBody = JSON.parse(r.triggerBody); }
+        catch { triggerBody = r.triggerBody; }
+      }
+      return {
+        id:          r.id,
+        kind:        "scrape" as const,
+        source:      "brightdata",
+        status:      r.status,
+        databaseId:  r.databaseId ?? undefined,
+        keyword:     r.keyword ?? undefined,
+        actor:       r.actor,
+        platform:    r.platform ?? undefined,
+        rowCount:    r.rowCount ?? undefined,
+        cost:        r.cost ?? undefined,
+        maxResults:  r.maxResults ?? undefined,
+        country:     r.country ?? undefined,
+        intent:      r.intent ?? undefined,
+        triggerUrl:  r.triggerUrl ?? undefined,
+        triggerBody,
+        createdAt:   r.createdAt.toISOString(),
+      };
+    }),
     ...importJobs.map((j) => ({
       id:           j.id,
       kind:         "import" as const,
