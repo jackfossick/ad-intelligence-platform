@@ -68,9 +68,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Clamp maxResults defensively. UI already clamps to 10–500 via the parsed
+  // plan, but the API is also called by smoke scripts that may not.
+  const clampedMaxResults = Math.max(1, Math.min(500, Math.floor(maxResults)));
+
   let snapshotId: string;
+  let triggerUrl: string;
+  let triggerBody: Record<string, unknown>[];
   try {
-    ({ snapshotId } = await triggerSnapshot(platform, { keyword, maxResults, country, intent }));
+    ({ snapshotId, triggerUrl, triggerBody } = await triggerSnapshot(platform, {
+      keyword,
+      maxResults: clampedMaxResults,
+      country,
+      intent,
+    }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Bright Data trigger failed" }, { status: 502 });
   }
@@ -82,10 +93,16 @@ export async function POST(req: NextRequest) {
   try {
     run = await prisma.scrapeRun.create({
       data: {
-        actor:    datasetId,
+        actor:       datasetId,
         keyword,
         platform,
-        status:   "running",
+        status:      "running",
+        maxResults:  clampedMaxResults,
+        country,
+        intent:      intent ?? "keyword",
+        databaseId:  databaseId ?? null,
+        triggerUrl,
+        triggerBody: JSON.stringify(triggerBody),
       },
     });
   } catch (e) {
@@ -202,6 +219,14 @@ export async function GET(req: NextRequest) {
     fetchError =
       `Snapshot fetch returned 0 items but Bright Data reports ${stats.records} records` +
       ` — likely timed out or exceeded response size limit. Retry from Job History.`;
+  }
+
+  // Defensive post-fetch truncation (NWLA-49). BD's `limit_per_input` is
+  // honoured by most collectors but a handful (notably TikTok keyword
+  // search) overshoot. We trim here so a user asking for 10 rows never
+  // sees 100 land in the DB.
+  if (!fetchError && scrapeRun?.maxResults && items.length > scrapeRun.maxResults) {
+    items = items.slice(0, scrapeRun.maxResults);
   }
 
   // No databaseId provided — preserve legacy behavior (return items in the

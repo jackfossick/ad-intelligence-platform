@@ -77,6 +77,19 @@ export function platformFromActor(actor: string | null | undefined): SupportedPl
  */
 export type BrightDataIntent = "keyword" | "handle" | "competitor_url";
 
+/**
+ * Per-platform support for the `country` filter. BD's Instagram dataset
+ * takes a username with no country field, so country is silently ignored
+ * on IG. We surface this upfront in the parsed-plan preview rather than
+ * dropping it without comment.
+ */
+export const COUNTRY_SUPPORTED: Record<SupportedPlatform, boolean> = {
+  TikTok:    true,
+  YouTube:   true,
+  Meta:      true,
+  Instagram: false,
+};
+
 function buildTrigger(
   platform: SupportedPlatform,
   opts: { keyword: string; maxResults: number; country: string; intent?: BrightDataIntent },
@@ -133,24 +146,39 @@ function buildTrigger(
 export async function triggerSnapshot(
   platform: SupportedPlatform,
   opts: { keyword: string; maxResults: number; country: string; intent?: BrightDataIntent },
-): Promise<{ snapshotId: string; datasetId: string }> {
+): Promise<{
+  snapshotId: string;
+  datasetId:  string;
+  /** The exact trigger URL (sans API key) we sent to BD — persisted for audit. */
+  triggerUrl: string;
+  /** The exact request body we sent to BD — persisted for audit. */
+  triggerBody: Record<string, unknown>[];
+}> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("BRIGHT_DATA_API_KEY not set in environment.");
   const datasetId = getDatasetId(platform);
   if (!datasetId) throw new Error(`No Bright Data dataset configured for ${platform}. Set BRIGHT_DATA_DATASET_${platform.toUpperCase()}.`);
 
   const { body, query } = buildTrigger(platform, opts);
-  const res = await fetch(
-    `${BD_BASE}/trigger?dataset_id=${encodeURIComponent(datasetId)}&include_errors=true${query}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+
+  // BD datasets v3 honour `limit_per_input` as a query-param row cap per
+  // discovery input. We pass `maxResults` here so a user asking for 10 rows
+  // doesn't get BD's default (~100). We still defensively truncate on the
+  // GET-side once items come back, because not every BD collector enforces
+  // the limit hard (NWLA-49).
+  const limit = Math.max(1, Math.floor(opts.maxResults));
+  const triggerUrl =
+    `${BD_BASE}/trigger?dataset_id=${encodeURIComponent(datasetId)}` +
+    `&include_errors=true&limit_per_input=${limit}${query}`;
+
+  const res = await fetch(triggerUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(body),
+  });
 
   if (!res.ok) {
     const text = await res.text();
@@ -161,7 +189,7 @@ export async function triggerSnapshot(
   if (!data.snapshot_id) {
     throw new Error(`Bright Data trigger returned no snapshot_id: ${JSON.stringify(data)}`);
   }
-  return { snapshotId: data.snapshot_id, datasetId };
+  return { snapshotId: data.snapshot_id, datasetId, triggerUrl, triggerBody: body };
 }
 
 export async function getSnapshotProgress(snapshotId: string): Promise<BrightDataProgress> {
