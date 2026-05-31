@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDb } from "@/lib/db-context";
-import type { ParsedQuery, QueryIntent } from "@/lib/queryParse";
+import type { AmbiguousField, ParsedQuery, QueryIntent } from "@/lib/queryParse";
 import { fallbackParse, termForBrightData } from "@/lib/queryParse";
 import type { SupportedPlatform } from "@/lib/brightData";
+
+const CONFIDENCE_CONFIRM_THRESHOLD = 0.6;
 
 // ── Design tokens (mirror docs/design.html) ───────────────────
 const T = {
@@ -183,9 +185,16 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
   const [override, setOverride] = useState<{
     rawText: string;
     platform?: SupportedPlatform;
+    intent?: QueryIntent;
     term?: string;
     maxResults?: number;
+    country?: string;
+    language?: string | null;
+    dateRangeDays?: number | null;
   } | null>(null);
+
+  // Explicit user acknowledgement on low-confidence parses — gates the Run button.
+  const [confirmed, setConfirmed] = useState(false);
 
   // Synchronous fallback parse for the current input. Always derived from
   // `text` — no setState needed, no cascading renders, no flash of empty
@@ -240,19 +249,30 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
     const matches = override && override.rawText === parsed.rawText;
     return {
       ...parsed,
-      platform:   matches ? (override.platform   ?? parsed.platform)   : parsed.platform,
-      term:       matches ? (override.term       ?? parsed.term)       : parsed.term,
-      maxResults: matches ? (override.maxResults ?? parsed.maxResults) : parsed.maxResults,
+      platform:      matches ? (override.platform      ?? parsed.platform)      : parsed.platform,
+      intent:        matches ? (override.intent        ?? parsed.intent)        : parsed.intent,
+      term:          matches ? (override.term          ?? parsed.term)          : parsed.term,
+      maxResults:    matches ? (override.maxResults    ?? parsed.maxResults)    : parsed.maxResults,
+      country:       matches && override.country !== undefined       ? override.country       : parsed.country,
+      language:      matches && override.language !== undefined      ? override.language      : parsed.language,
+      dateRangeDays: matches && override.dateRangeDays !== undefined ? override.dateRangeDays : parsed.dateRangeDays,
     };
   }, [parsed, override]);
 
-  const setOverrideField = (k: "platform" | "term" | "maxResults", v: string | number) => {
+  type OverrideKey = "platform" | "intent" | "term" | "maxResults" | "country" | "language" | "dateRangeDays";
+  const setOverrideField = (k: OverrideKey, v: string | number | null) => {
     if (!parsed) return;
     setOverride((prev) => {
       const base = prev && prev.rawText === parsed.rawText ? prev : { rawText: parsed.rawText };
       return { ...base, [k]: v };
     });
   };
+
+  const lowConfidence =
+    !!finalPlan && finalPlan.confidence < CONFIDENCE_CONFIRM_THRESHOLD;
+  const needsConfirm = lowConfidence && !confirmed;
+  const ambiguous = (k: AmbiguousField) =>
+    !!finalPlan && finalPlan.ambiguousFields.includes(k);
 
   const onRun = async () => {
     if (!finalPlan) return;
@@ -293,7 +313,13 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             </svg>
           </div>
           <textarea
-            value={text} onChange={(e) => setText(e.target.value)}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              // Clear the low-confidence ack as soon as the user edits the
+              // input — every new plan needs its own explicit confirm.
+              if (confirmed) setConfirmed(false);
+            }}
             placeholder='e.g. "weight loss before and after on tiktok" or "@gymshark on instagram" or "100 facebook ads from athleanx"'
             rows={2}
             style={{ flex: 1, border: "none", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: 13, color: T.text, background: "transparent", padding: 4 }}
@@ -316,15 +342,20 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
 
       {/* Parser preview / confirmation card */}
       {finalPlan && (
-        <div style={{ border: `1px solid ${T.accent}40`, background: T.al, borderRadius: 10, padding: "12px 14px" }}>
+        <div style={{
+          border: `1px solid ${lowConfidence ? T.red : T.accent}40`,
+          background: lowConfidence ? T.rl : T.al,
+          borderRadius: 10, padding: "12px 14px",
+        }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: T.ad }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: lowConfidence ? T.rd : T.ad }}>
               We&apos;ll scrape — review before running
             </span>
             {parsing && (
               <span style={{ fontSize: 10, color: T.text2, marginLeft: 8 }}>refining parse…</span>
             )}
-            <span style={{ marginLeft: "auto", fontSize: 10, color: T.text2 }}>
+            <ConfidenceChip value={finalPlan.confidence} />
+            <span style={{ fontSize: 10, color: T.text2 }}>
               parsed via {finalPlan.source === "llm" ? "AI" : "rule-based fallback"}
             </span>
           </div>
@@ -346,33 +377,36 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             </div>
           )}
 
-          {/* Editable parsed fields */}
+          {/* Editable parsed fields — every extracted field is editable inline. */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 12 }}>
-            <EditableRow label="Platform">
+            <EditableRow label="Platform" warn={ambiguous("platform")}>
               <select
                 value={finalPlan.platform}
                 onChange={(e) => setOverrideField("platform", e.target.value as SupportedPlatform)}
-                style={{
-                  width: "100%", padding: "4px 6px", borderRadius: 5,
-                  border: `1px solid ${T.border}`, background: T.bg2,
-                  fontSize: 12, color: T.text, fontFamily: "inherit",
-                }}
+                style={editableInputStyle(ambiguous("platform"))}
               >
                 {(["TikTok", "Instagram", "Meta", "YouTube"] as const).map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
             </EditableRow>
-            <EditableRow label={intentLabel(finalPlan.intent)}>
+            <EditableRow label="Intent" warn={ambiguous("intent")}>
+              <select
+                value={finalPlan.intent}
+                onChange={(e) => setOverrideField("intent", e.target.value as QueryIntent)}
+                style={editableInputStyle(ambiguous("intent"))}
+              >
+                {(["handle", "keyword", "category", "competitor_url"] as const).map((i) => (
+                  <option key={i} value={i}>{intentLabel(i)}</option>
+                ))}
+              </select>
+            </EditableRow>
+            <EditableRow label={intentLabel(finalPlan.intent)} warn={ambiguous("term")}>
               <input
                 type="text"
                 value={finalPlan.term}
                 onChange={(e) => setOverrideField("term", e.target.value)}
-                style={{
-                  width: "100%", padding: "4px 6px", borderRadius: 5,
-                  border: `1px solid ${T.border}`, background: T.bg2,
-                  fontSize: 12, color: T.text, fontFamily: "inherit", outline: "none",
-                }}
+                style={editableInputStyle(ambiguous("term"))}
               />
             </EditableRow>
             <EditableRow label="Max ads">
@@ -383,19 +417,49 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                   const n = Math.max(10, Math.min(500, Number(e.target.value) || 100));
                   setOverrideField("maxResults", n);
                 }}
-                style={{
-                  width: "100%", padding: "4px 6px", borderRadius: 5,
-                  border: `1px solid ${T.border}`, background: T.bg2,
-                  fontSize: 12, color: T.text, fontFamily: "inherit", outline: "none",
-                }}
+                style={editableInputStyle(false)}
               />
             </EditableRow>
-            <InfRow label="Intent"     value={finalPlan.intent.replace(/_/g, " ")} />
-            <InfRow label="Country"    value={finalPlan.country} />
-            <InfRow
-              label="Date range"
-              value={finalPlan.dateRangeDays ? `last ${finalPlan.dateRangeDays} days` : "—"}
-            />
+            <EditableRow label="Country" warn={ambiguous("country")}>
+              <input
+                type="text"
+                value={finalPlan.country}
+                maxLength={2}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+                  setOverrideField("country", v || "US");
+                }}
+                style={editableInputStyle(ambiguous("country"))}
+                placeholder="US"
+              />
+            </EditableRow>
+            <EditableRow label="Language" warn={ambiguous("language")}>
+              <select
+                value={finalPlan.language ?? ""}
+                onChange={(e) => setOverrideField("language", e.target.value || null)}
+                style={editableInputStyle(ambiguous("language"))}
+              >
+                <option value="">Any</option>
+                <option value="en">English (en)</option>
+                <option value="es">Spanish (es)</option>
+                <option value="fr">French (fr)</option>
+                <option value="de">German (de)</option>
+              </select>
+            </EditableRow>
+            <EditableRow label="Date range (days)" warn={ambiguous("dateRangeDays")}>
+              <input
+                type="number" min={1} max={365}
+                value={finalPlan.dateRangeDays ?? ""}
+                placeholder="any"
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw) { setOverrideField("dateRangeDays", null); return; }
+                  const n = Math.max(1, Math.min(365, Number(raw) || 0));
+                  setOverrideField("dateRangeDays", n || null);
+                }}
+                style={editableInputStyle(ambiguous("dateRangeDays"))}
+              />
+            </EditableRow>
           </div>
 
           {finalPlan.alsoConsider.length > 0 && (
@@ -415,6 +479,28 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                 </button>
               ))}
             </div>
+          )}
+
+          {/* Low-confidence confirm gate. The user must check the box before
+             the Run button activates so a bad auto-parse never launches
+             a scrape silently. */}
+          {lowConfidence && (
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: 8,
+              padding: "8px 10px", marginBottom: 10, borderRadius: 6,
+              background: T.rl, color: T.rd, fontSize: 11, cursor: "pointer",
+            }}>
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                <strong>Low confidence parse.</strong> The fields marked red above were guessed.
+                Review them, edit if wrong, then tick this box to confirm.
+              </span>
+            </label>
           )}
 
           {parseError && (
@@ -437,10 +523,11 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={onRun}
-              disabled={running || !finalPlan.term.trim() || !activeDb}
-              style={btnStyle({ primary: true, disabled: running || !finalPlan.term.trim() || !activeDb })}
+              disabled={running || !finalPlan.term.trim() || !activeDb || needsConfirm}
+              style={btnStyle({ primary: true, disabled: running || !finalPlan.term.trim() || !activeDb || needsConfirm })}
+              title={needsConfirm ? "Tick the confirm box above to enable" : undefined}
             >
-              {running ? "Starting…" : `Run ${finalPlan.platform} scrape`}
+              {running ? "Starting…" : needsConfirm ? "Confirm to run" : `Run ${finalPlan.platform} scrape`}
             </button>
             <button onClick={onSwitchToRegular} style={btnStyle({})}>Edit in regular mode</button>
             <span style={{ fontSize: 11, color: T.text2, marginLeft: "auto" }}>
@@ -453,14 +540,50 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
   );
 }
 
-function EditableRow({ label, children }: { label: string; children: React.ReactNode }) {
+function EditableRow({ label, warn, children }: { label: string; warn?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ background: T.bg2, padding: "6px 10px", borderRadius: 6, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T.text2, marginBottom: 4 }}>
+    <div style={{
+      background: T.bg2, padding: "6px 10px", borderRadius: 6,
+      border: `1px solid ${warn ? T.red : T.border}`,
+      boxShadow: warn ? `0 0 0 2px ${T.red}1a` : undefined,
+    }}>
+      <div style={{
+        fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+        color: warn ? T.rd : T.text2, marginBottom: 4,
+        display: "flex", alignItems: "center", gap: 4,
+      }}>
         {label}
+        {warn && <span title="The parser was unsure about this field — review or edit before running.">⚠</span>}
       </div>
       {children}
     </div>
+  );
+}
+
+function editableInputStyle(warn: boolean): React.CSSProperties {
+  return {
+    width: "100%", padding: "4px 6px", borderRadius: 5,
+    border: `1px solid ${warn ? T.red : T.border}`,
+    background: T.bg2,
+    fontSize: 12, color: T.text, fontFamily: "inherit", outline: "none",
+  };
+}
+
+function ConfidenceChip({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  const high = value >= 0.85;
+  const low  = value < CONFIDENCE_CONFIRM_THRESHOLD;
+  const bg = high ? T.gl : low ? T.rl : T.ambl;
+  const fg = high ? T.gd : low ? T.rd : "#854F0B";
+  return (
+    <span style={{
+      marginLeft: "auto", fontSize: 10, padding: "2px 7px",
+      borderRadius: 999, background: bg, color: fg, fontWeight: 500,
+      display: "inline-flex", alignItems: "center", gap: 4,
+    }} title={`Parser confidence: ${pct}%`}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: fg }} />
+      {pct}% confidence
+    </span>
   );
 }
 
