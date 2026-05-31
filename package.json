@@ -7,6 +7,8 @@
     "build": "prisma generate && prisma migrate deploy && NODE_ENV=production next build",
     "start": "NODE_ENV=production next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "normalize": "tsx scripts/normalize-data.ts",
     "export-csv": "tsx scripts/export-csv.ts",
     "db:studio": "prisma studio",
@@ -36,11 +38,13 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.7",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.7"
   }
 }

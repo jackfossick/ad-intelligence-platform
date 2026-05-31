@@ -11,11 +11,23 @@
  *
  * Output (ParsedQuery) feeds the scrape dispatcher and is also shown to the
  * user as a confirmation card before any BD snapshot is triggered (NWLA-32).
+ *
+ * NWLA-50: added `confidence` (0..1) and `ambiguousFields` so the UI can
+ * mark uncertain extractions and force an explicit confirm before launch.
  */
 
 import type { SupportedPlatform } from "./brightData";
 
 export type QueryIntent = "handle" | "keyword" | "category" | "competitor_url";
+
+/** Field keys that may be flagged as ambiguous by the parser. */
+export type AmbiguousField =
+  | "intent"
+  | "platform"
+  | "term"
+  | "country"
+  | "language"
+  | "dateRangeDays";
 
 export type ParsedQuery = {
   /** What kind of input the user typed. */
@@ -42,48 +54,138 @@ export type ParsedQuery = {
   warnings: string[];
   /** "llm" or "fallback" — UI hints when a richer parse is available. */
   source: "llm" | "fallback";
+  /**
+   * Parser confidence in the overall extraction, 0..1.
+   *
+   *   ≥ 0.85 — high; UI runs without extra confirmation.
+   *   0.6 – 0.85 — medium; UI shows plan, user can launch directly.
+   *   < 0.6 — low; UI forces an explicit "Confirm and run" gate.
+   *
+   * Fallback path emits 0.45–0.9 depending on signal strength. LLM path is
+   * trusted only when it returns its own number; missing → defaults to 0.85.
+   */
+  confidence: number;
+  /** Field keys that the parser is unsure about — UI marks them red. */
+  ambiguousFields: AmbiguousField[];
 };
 
 const SUPPORTED: SupportedPlatform[] = ["TikTok", "Meta", "Instagram", "YouTube"];
+
+/** Brands that are ambiguous between handle and keyword on a bare mention. */
+const AMBIGUOUS_BRAND_TOKENS = new Set([
+  "nike", "adidas", "apple", "tesla", "amazon", "google",
+  "samsung", "puma", "uber", "airbnb", "netflix", "spotify",
+]);
 
 /** Map a free-text platform name (or alias) to a SupportedPlatform. */
 export function normalisePlatform(raw: string | null | undefined): SupportedPlatform | null {
   if (!raw) return null;
   const s = raw.toLowerCase().trim();
-  if (/tiktok|tt\b/.test(s)) return "TikTok";
-  if (/instagram|insta\b|\big\b/.test(s)) return "Instagram";
-  if (/meta|facebook|fb\b/.test(s)) return "Meta";
-  if (/youtube|yt\b/.test(s)) return "YouTube";
+  if (/\btiktok\b|\btt\b/.test(s)) return "TikTok";
+  if (/\binstagram\b|\binsta\b|\big\b/.test(s)) return "Instagram";
+  if (/\bmeta\b|\bfacebook\b|\bfb\b/.test(s)) return "Meta";
+  if (/\byoutube\b|\byt\b/.test(s)) return "YouTube";
   return null;
+}
+
+/** Find every platform named in the text, in source-order. */
+function extractAllPlatforms(text: string): SupportedPlatform[] {
+  const s = text.toLowerCase();
+  const hits: { idx: number; p: SupportedPlatform }[] = [];
+  const patterns: { re: RegExp; p: SupportedPlatform }[] = [
+    { re: /\btiktok\b|\btt\b/g,                   p: "TikTok"    },
+    { re: /\binstagram\b|\binsta\b|\big\b/g,      p: "Instagram" },
+    { re: /\bmeta\b|\bfacebook\b|\bfb\b/g,        p: "Meta"      },
+    { re: /\byoutube\b|\byt\b/g,                  p: "YouTube"   },
+  ];
+  for (const { re, p } of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) hits.push({ idx: m.index, p });
+  }
+  hits.sort((a, b) => a.idx - b.idx);
+  const out: SupportedPlatform[] = [];
+  for (const h of hits) if (!out.includes(h.p)) out.push(h.p);
+  return out;
+}
+
+/**
+ * Detect a full URL in the input. Recognises:
+ *   - Meta Ad Library URL → "competitor_url" + Meta platform
+ *   - facebook.com / .../pages/... page URL → "handle" + Meta
+ *   - tiktok.com / instagram.com / youtube.com profile/page URL → handle on that platform
+ *   - any other http(s) URL → competitor_url, platform left to other detection.
+ */
+function extractUrl(text: string): {
+  url: string;
+  intent: QueryIntent;
+  platform: SupportedPlatform | null;
+  term: string;
+} | null {
+  const m = text.match(/https?:\/\/[^\s]+/i);
+  if (!m) return null;
+  const url = m[0].replace(/[.,;)\]>]+$/, "");
+
+  let host = "";
+  try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, ""); }
+  catch { return { url, intent: "competitor_url", platform: null, term: url }; }
+
+  if (host.includes("facebook.com") && url.toLowerCase().includes("/ads/library")) {
+    return { url, intent: "competitor_url", platform: "Meta", term: url };
+  }
+  if (host === "facebook.com" || host.endsWith(".facebook.com")) {
+    const slug = url.match(/facebook\.com\/(?:pages\/[^/]+\/)?([^/?#]+)/i)?.[1];
+    return { url, intent: "handle", platform: "Meta", term: slug ?? url };
+  }
+  if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+    const slug = url.match(/tiktok\.com\/@([^/?#]+)/i)?.[1];
+    return slug
+      ? { url, intent: "handle", platform: "TikTok", term: slug }
+      : { url, intent: "competitor_url", platform: "TikTok", term: url };
+  }
+  if (host === "instagram.com" || host.endsWith(".instagram.com")) {
+    const slug = url.match(/instagram\.com\/([^/?#]+)/i)?.[1];
+    return slug
+      ? { url, intent: "handle", platform: "Instagram", term: slug }
+      : { url, intent: "competitor_url", platform: "Instagram", term: url };
+  }
+  if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be") {
+    const slug = url.match(/youtube\.com\/(?:@|c\/|channel\/|user\/)?([^/?#]+)/i)?.[1];
+    return slug
+      ? { url, intent: "handle", platform: "YouTube", term: slug }
+      : { url, intent: "competitor_url", platform: "YouTube", term: url };
+  }
+
+  return { url, intent: "competitor_url", platform: null, term: url };
 }
 
 /** Pull a handle from text like "@gymshark" or "gymshark.com". Returns null on no match. */
 function extractHandleOrDomain(text: string): { handle: string; isDomain: boolean } | null {
   const at = text.match(/@([A-Za-z0-9._-]{2,})/);
   if (at) return { handle: at[1], isDomain: false };
-  const domain = text.match(/\b([a-z0-9-]{2,})\.(com|co|io|net|org|uk|us|app)\b/i);
+  const domain = text.match(/\b([a-z0-9-]{2,})\.(com|co|io|net|org|uk|us|app|store|shop)\b/i);
   if (domain) return { handle: domain[1], isDomain: true };
   return null;
 }
 
 const STOPWORDS = new Set([
-  "the", "and", "or", "with", "for", "of", "in", "on", "from",
-  "find", "get", "scrape", "all", "platforms",
-  "ads", "ad", "tiktok", "meta", "facebook", "instagram", "youtube", "yt",
-  "last", "days", "day", "weeks", "week", "months", "month",
-  "english", "spanish", "french", "german",
-  "us", "uk", "usa", "country", "region",
+  "the", "and", "or", "with", "for", "of", "in", "on", "from", "by", "via", "only",
+  "find", "get", "scrape", "all", "platforms", "show", "fetch", "pull", "grab",
+  "ads", "ad", "tiktok", "meta", "facebook", "instagram", "youtube", "yt", "ig", "fb", "insta", "tt",
+  "last", "days", "day", "weeks", "week", "months", "month", "year", "quarter",
+  "english", "spanish", "french", "german", "language", "lang",
+  "us", "uk", "usa", "country", "region", "canada", "australia",
   "this", "that", "about", "around",
 ]);
 
-/** Strip platform/region/length tokens out of the raw text to leave search terms. */
 function extractSearchTerm(text: string): string {
   const cleaned = text
     .toLowerCase()
     .replace(/@([A-Za-z0-9._-]{2,})/g, " ")
-    .replace(/\b[a-z0-9-]{2,}\.(com|co|io|net|org|uk|us|app)\b/gi, " ")
+    .replace(/\b[a-z0-9-]{2,}\.(com|co|io|net|org|uk|us|app|store|shop)\b/gi, " ")
     .replace(/\blast\s+\d+\s+(days?|weeks?|months?)\b/g, " ")
-    .replace(/\bin\s+(the\s+)?(us|usa|uk|eu|europe|america)\b/g, " ")
+    .replace(/\blast\s+(week|month|year|quarter)\b/g, " ")
+    .replace(/\bin\s+(the\s+)?(us|usa|uk|eu|europe|america|canada|australia)\b/g, " ")
+    .replace(/\bin\s+(english|spanish|french|german)\b/g, " ")
     .replace(/[^\w\s-]/g, " ")
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w))
@@ -93,18 +195,31 @@ function extractSearchTerm(text: string): string {
 }
 
 function extractMaxResults(text: string): number {
-  const m = text.match(/\b(\d{2,4})\b/);
-  if (!m) return 100;
-  return Math.max(10, Math.min(500, Number(m[1])));
+  // Prefer explicit "<N> ads" / "<N> results" over a bare number that might be
+  // a date or a stray count — protects "30 days" from bleeding into maxResults.
+  const explicit = text.match(/\b(\d{2,4})\s*(ads?|results?|items?|posts?)\b/i);
+  if (explicit) return Math.max(10, Math.min(500, Number(explicit[1])));
+  const bare = text.match(/\b(\d{2,4})\b/);
+  if (!bare) return 100;
+  const ctx = text.slice(Math.max(0, (bare.index ?? 0) - 5), (bare.index ?? 0) + bare[1].length + 12);
+  if (/(?:last|past|previous)\s*\d/i.test(ctx) || /\d{1,3}\s*(?:days?|weeks?|months?|years?)/i.test(ctx)) {
+    return 100;
+  }
+  return Math.max(10, Math.min(500, Number(bare[1])));
 }
 
 function extractDateRangeDays(text: string): number | null {
   const t = text.toLowerCase();
-  const m = t.match(/last\s+(\d{1,3})\s*(day|days|d)/);
+  const m = t.match(/(?:last|past|previous)\s+(\d{1,3})\s*(day|days|d)\b/);
   if (m) return Math.max(1, Math.min(365, Number(m[1])));
-  if (/last\s+week/.test(t)) return 7;
-  if (/last\s+month/.test(t)) return 30;
-  if (/last\s+(quarter|3\s+months)/.test(t)) return 90;
+  const w = t.match(/(?:last|past|previous)\s+(\d{1,3})\s*(week|weeks)\b/);
+  if (w) return Math.max(1, Math.min(365, Number(w[1]) * 7));
+  const mo = t.match(/(?:last|past|previous)\s+(\d{1,3})\s*(month|months)\b/);
+  if (mo) return Math.max(1, Math.min(365, Number(mo[1]) * 30));
+  if (/(?:last|past)\s+week\b/.test(t)) return 7;
+  if (/(?:last|past)\s+month\b/.test(t)) return 30;
+  if (/(?:last|past)\s+(quarter|3\s+months)\b/.test(t)) return 90;
+  if (/(?:last|past)\s+year\b/.test(t)) return 365;
   return null;
 }
 
@@ -114,15 +229,19 @@ function extractCountry(text: string): string {
   if (/\bin\s+(the\s+)?(us|usa|america|states)\b/.test(t)) return "US";
   if (/\bin\s+canada\b|\bcanadian\b/.test(t)) return "CA";
   if (/\bin\s+australia\b|\baustralian\b/.test(t)) return "AU";
+  if (/\bin\s+germany\b|\bgerman\s+market\b/.test(t)) return "DE";
+  if (/\bin\s+france\b|\bfrench\s+market\b/.test(t)) return "FR";
   return "US";
 }
 
 function extractLanguage(text: string): string | null {
   const t = text.toLowerCase();
-  if (/\bspanish\b|\bes\b/.test(t)) return "es";
-  if (/\bfrench\b|\bfr\b/.test(t)) return "fr";
-  if (/\bgerman\b|\bde\b/.test(t)) return "de";
-  if (/\benglish\b|\ben\b/.test(t)) return "en";
+  // Require "in <language>" or "<language>-language" framing so we don't
+  // mis-extract a language from a brand name.
+  if (/\bin\s+spanish\b|\bspanish[-\s]language\b/.test(t)) return "es";
+  if (/\bin\s+french\b|\bfrench[-\s]language\b/.test(t)) return "fr";
+  if (/\bin\s+german\b|\bgerman[-\s]language\b/.test(t)) return "de";
+  if (/\bin\s+english\b|\benglish[-\s]language\b/.test(t)) return "en";
   return null;
 }
 
@@ -134,19 +253,46 @@ function extractLanguage(text: string): string | null {
  */
 export function fallbackParse(rawText: string): ParsedQuery {
   const text = rawText.trim();
-  const lower = text.toLowerCase();
+  const ambiguousFields: AmbiguousField[] = [];
+  let confidence = 0.7;
 
-  const platformHint = normalisePlatform(
-    /tiktok/.test(lower) ? "tiktok" :
-    /instagram|insta\b/.test(lower) ? "instagram" :
-    /meta|facebook/.test(lower) ? "meta" :
-    /youtube|yt\b/.test(lower) ? "youtube" : null,
-  );
+  const urlInfo = extractUrl(text);
+  const allPlatforms = extractAllPlatforms(text);
+  const platformHint = allPlatforms[0] ?? null;
+  const handleMatch = urlInfo ? null : extractHandleOrDomain(text);
 
-  const handleMatch = extractHandleOrDomain(text);
-  const platform: SupportedPlatform = platformHint ?? (handleMatch ? "Instagram" : "TikTok");
+  let intent: QueryIntent;
+  let platform: SupportedPlatform;
+  let term: string;
+
+  if (urlInfo) {
+    intent = urlInfo.intent;
+    platform = urlInfo.platform ?? platformHint ?? "Meta";
+    term = urlInfo.term;
+    confidence = 0.9;
+  } else if (handleMatch) {
+    intent = "handle";
+    platform = platformHint ?? "Instagram";
+    term = handleMatch.handle;
+    confidence = handleMatch.isDomain ? 0.85 : 0.9;
+    if (!platformHint) ambiguousFields.push("platform");
+  } else {
+    intent = "keyword";
+    platform = platformHint ?? "TikTok";
+    const cleaned = extractSearchTerm(text);
+    term = cleaned || text.replace(/[^\w\s-]/g, " ").trim();
+    confidence = platformHint ? 0.75 : 0.6;
+    if (!platformHint) ambiguousFields.push("platform");
+
+    // Single-token, well-known brand → ambiguous (brand vs. keyword).
+    const trimmedLower = term.toLowerCase().trim();
+    if (/^[a-z][a-z0-9-]*$/i.test(trimmedLower) && AMBIGUOUS_BRAND_TOKENS.has(trimmedLower)) {
+      ambiguousFields.push("intent");
+      confidence = Math.min(confidence, 0.45);
+    }
+  }
+
   const warnings: string[] = [];
-
   if (platform === "Meta") {
     warnings.push(
       "Meta scraping currently returns a Bright Data crawl_error — see NWLA-23. " +
@@ -164,23 +310,32 @@ export function fallbackParse(rawText: string): ParsedQuery {
     );
   }
 
-  let intent: QueryIntent;
-  let term: string;
-  if (handleMatch) {
-    intent = "handle";
-    term = handleMatch.handle;
-  } else {
-    intent = "keyword";
-    const cleaned = extractSearchTerm(text);
-    term = cleaned || text.replace(/[^\w\s-]/g, " ").trim();
+  // alsoConsider — additional platforms the user named, minus the primary,
+  // plus other supported platforms when no platform was named on a keyword.
+  const alsoConsider: SupportedPlatform[] = [];
+  for (const p of allPlatforms) if (p !== platform && !alsoConsider.includes(p)) alsoConsider.push(p);
+  if (!platformHint && intent === "keyword") {
+    for (const p of SUPPORTED) {
+      if (p !== platform && p !== "Meta" && !alsoConsider.includes(p)) alsoConsider.push(p);
+    }
   }
 
-  const alsoConsider: SupportedPlatform[] = [];
-  if (!platformHint && intent === "keyword") {
-    // Generic keyword with no platform hint — surface the other supported ones
-    // so the user can run extra snapshots if they want.
-    for (const p of SUPPORTED) if (p !== platform && p !== "Meta") alsoConsider.push(p);
-  }
+  const country = extractCountry(text);
+  const language = extractLanguage(text);
+  const dateRangeDays = extractDateRangeDays(text);
+  const maxResults = extractMaxResults(text);
+
+  const reasoning = urlInfo
+    ? `Detected a ${urlInfo.intent === "handle" ? "page/profile" : "competitor"} URL on ${platform}; using it directly.`
+    : handleMatch
+      ? platformHint
+        ? `Detected ${platform} and a ${handleMatch.isDomain ? "domain" : "handle"} — parsing as a brand scrape.`
+        : `Detected a ${handleMatch.isDomain ? "domain" : "handle"} — defaulting to ${platform}. Edit the platform if you meant something else.`
+      : platformHint
+        ? `Detected ${platform} from the text and parsed the rest as a keyword.`
+        : ambiguousFields.includes("intent")
+          ? `"${term}" could be a brand or a keyword — pick the right intent below before launching.`
+          : `No platform mentioned — defaulting to TikTok keyword search. Pick a different platform if you meant Meta/IG/YouTube.`;
 
   return {
     intent,
@@ -188,17 +343,15 @@ export function fallbackParse(rawText: string): ParsedQuery {
     alsoConsider,
     term: term || text,
     rawText: text,
-    maxResults: extractMaxResults(text),
-    country: extractCountry(text),
-    language: extractLanguage(text),
-    dateRangeDays: extractDateRangeDays(text),
-    reasoning: platformHint
-      ? `Detected ${platform} from the text and parsed the rest as a ${intent}.`
-      : intent === "handle"
-        ? `Detected a handle/domain — defaulting to ${platform}. Edit the platform if you meant something else.`
-        : `No platform mentioned — defaulting to TikTok keyword search. Pick a different platform if you meant Meta/IG/YouTube.`,
+    maxResults,
+    country,
+    language,
+    dateRangeDays,
+    reasoning,
     warnings,
     source: "fallback",
+    confidence,
+    ambiguousFields,
   };
 }
 
@@ -262,6 +415,19 @@ export function sanitiseLLMResult(
     ? raw.reasoning.trim().slice(0, 400)
     : fb.reasoning;
 
+  const llmConfidence = typeof raw.confidence === "number"
+    ? Math.max(0, Math.min(1, raw.confidence))
+    : 0.85;
+
+  const ambigRaw = Array.isArray(raw.ambiguousFields) ? raw.ambiguousFields : [];
+  const ambiguousFields: AmbiguousField[] = [];
+  const allowed: AmbiguousField[] = ["intent", "platform", "term", "country", "language", "dateRangeDays"];
+  for (const f of ambigRaw) {
+    if (typeof f === "string" && allowed.includes(f as AmbiguousField) && !ambiguousFields.includes(f as AmbiguousField)) {
+      ambiguousFields.push(f as AmbiguousField);
+    }
+  }
+
   return {
     intent,
     platform,
@@ -275,6 +441,8 @@ export function sanitiseLLMResult(
     reasoning,
     warnings,
     source: "llm",
+    confidence: llmConfidence,
+    ambiguousFields,
   };
 }
 
