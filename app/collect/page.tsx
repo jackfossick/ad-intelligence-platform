@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDb } from "@/lib/db-context";
-import type { AmbiguousField, ParsedQuery, QueryIntent } from "@/lib/queryParse";
-import { fallbackParse, termForBrightData } from "@/lib/queryParse";
+import type { SearchPlan, SearchStrategy } from "@/lib/searchStrategy";
+import { fallbackStrategy, keywordForBrightData } from "@/lib/searchStrategy";
 import type { SupportedPlatform } from "@/lib/brightData";
 
 const CONFIDENCE_CONFIRM_THRESHOLD = 0.6;
@@ -151,148 +151,162 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: "run" | "a
 
 // ── SCRAPE PANE ───────────────────────────────────────────────
 function ScrapePane({ mode, setMode, setTab }: { mode: Mode; setMode: (m: Mode) => void; setTab: (t: Tab) => void }) {
-  // Lift active-scrape state so it survives mode switches inside the scrape pane
-  // and so progress is visible immediately after the user clicks "Run scrape".
-  const [activeScrape, setActiveScrape] = useState<ActiveScrape | null>(null);
+  // Lift active-scrape state. Fast mode fans out N scrapes (one per plan
+  // the user ticked), Regular mode launches exactly 1 — both reuse the
+  // same multi-progress panel so the UI never branches downstream.
+  const [activeScrapes, setActiveScrapes] = useState<ActiveScrape[] | null>(null);
 
-  if (activeScrape) {
+  if (activeScrapes && activeScrapes.length > 0) {
     return (
-      <ScrapeProgressPanel
-        scrape={activeScrape}
-        onDismiss={() => setActiveScrape(null)}
-        onViewHistory={() => { setActiveScrape(null); setTab("history"); }}
+      <MultiScrapeProgressPanel
+        scrapes={activeScrapes}
+        onDismiss={() => setActiveScrapes(null)}
+        onViewHistory={() => { setActiveScrapes(null); setTab("history"); }}
       />
     );
   }
 
   return mode === "fast"
-    ? <FastMode onSwitchToRegular={() => setMode("regular")} onLaunched={setActiveScrape} />
-    : <RegularMode onLaunched={setActiveScrape} />;
+    ? <FastMode onSwitchToRegular={() => setMode("regular")} onLaunched={setActiveScrapes} />
+    : <RegularMode onLaunched={(s) => setActiveScrapes([s])} />;
 }
 
-function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape) => void }) {
+type PlanOverride = {
+  platform?: SupportedPlatform;
+  keyword?: string;
+  maxResults?: number;
+  country?: string;
+  language?: string | null;
+  dateRangeDays?: number | null;
+};
+
+function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => void; onLaunched: (s: ActiveScrape[]) => void }) {
   const { activeDb } = useDb();
   const [text, setText] = useState("");
-  const [llmParsed, setLlmParsed] = useState<ParsedQuery | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
+  const [llmStrategy, setLlmStrategy] = useState<SearchStrategy | null>(null);
+  const [strategising, setStrategising] = useState(false);
+  const [strategyError, setStrategyError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // User-editable overrides applied on top of the parsed plan. Keyed by raw
-  // text so that typing a new query clears stale overrides automatically
-  // (no extra effect needed — derived in finalPlan below).
-  const [override, setOverride] = useState<{
-    rawText: string;
-    platform?: SupportedPlatform;
-    intent?: QueryIntent;
-    term?: string;
-    maxResults?: number;
-    country?: string;
-    language?: string | null;
-    dateRangeDays?: number | null;
-  } | null>(null);
+  // Per-plan UI state — sparse, keyed by plan id. Sparse selection lets us
+  // default-to-true without a reset effect: an absent entry means "selected"
+  // for plan ids that the current strategy includes. When the strategy
+  // changes, the new plan ids automatically default to selected because
+  // they are absent from `unselected`. We track *unticks* and *overrides*.
+  const [unselected, setUnselected] = useState<Record<string, boolean>>({});
+  const [overrides, setOverrides] = useState<Record<string, PlanOverride>>({});
 
-  // Explicit user acknowledgement on low-confidence parses — gates the Run button.
+  // Explicit user acknowledgement on low-confidence strategies — gates the Run button.
   const [confirmed, setConfirmed] = useState(false);
 
-  // Synchronous fallback parse for the current input. Always derived from
-  // `text` — no setState needed, no cascading renders, no flash of empty
-  // state while the LLM call is in flight.
   const trimmed = text.trim();
-  const fallbackParsed = useMemo<ParsedQuery | null>(
-    () => (trimmed.length >= 4 ? fallbackParse(trimmed) : null),
+  const fallbackStrat = useMemo<SearchStrategy | null>(
+    () => (trimmed.length >= 4 ? fallbackStrategy(trimmed) : null),
     [trimmed],
   );
 
-  // Prefer the LLM result iff it matches the *current* trimmed text. Stale
-  // LLM responses for previous inputs are ignored automatically.
-  const parsed: ParsedQuery | null =
-    llmParsed && llmParsed.rawText === trimmed ? llmParsed : fallbackParsed;
+  // Prefer the LLM strategy iff it matches the *current* trimmed text.
+  // Stale LLM responses for previous inputs are ignored automatically.
+  const strategy: SearchStrategy | null =
+    llmStrategy && llmStrategy.rawText === trimmed ? llmStrategy : fallbackStrat;
 
-  // Debounced LLM parse — fires 600ms after the user stops typing. setState
-  // calls live inside the async callback (not the effect body), so the
-  // "set-state-in-effect" rule isn't triggered.
+  // Debounced LLM strategy — fires 600ms after the user stops typing.
   const reqIdRef = useRef(0);
   useEffect(() => {
     if (trimmed.length < 4) return;
     const myReq = ++reqIdRef.current;
     const id = setTimeout(async () => {
       try {
-        const res = await fetch("/api/parse-query", {
+        setStrategising(true);
+        const res = await fetch("/api/search-strategy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: trimmed }),
         });
         if (myReq !== reqIdRef.current) return;
-        setParsing(true);
-        const data = await res.json() as ParsedQuery | { error?: string };
+        const data = await res.json() as SearchStrategy | { error?: string };
         if (myReq !== reqIdRef.current) return;
-        if (!res.ok || !("intent" in data)) {
-          setParseError(("error" in data && data.error) || "Parse failed");
+        if (!res.ok || !("plans" in data)) {
+          setStrategyError(("error" in data && data.error) || "Strategy failed");
         } else {
-          setLlmParsed(data);
-          setParseError(null);
+          setLlmStrategy(data);
+          setStrategyError(null);
         }
       } catch (e) {
         if (myReq !== reqIdRef.current) return;
-        setParseError(e instanceof Error ? e.message : "Parse failed");
+        setStrategyError(e instanceof Error ? e.message : "Strategy failed");
       } finally {
-        if (myReq === reqIdRef.current) setParsing(false);
+        if (myReq === reqIdRef.current) setStrategising(false);
       }
     }, 600);
     return () => { clearTimeout(id); };
   }, [trimmed]);
 
-  const finalPlan = useMemo(() => {
-    if (!parsed) return null;
-    const matches = override && override.rawText === parsed.rawText;
-    return {
-      ...parsed,
-      platform:      matches ? (override.platform      ?? parsed.platform)      : parsed.platform,
-      intent:        matches ? (override.intent        ?? parsed.intent)        : parsed.intent,
-      term:          matches ? (override.term          ?? parsed.term)          : parsed.term,
-      maxResults:    matches ? (override.maxResults    ?? parsed.maxResults)    : parsed.maxResults,
-      country:       matches && override.country !== undefined       ? override.country       : parsed.country,
-      language:      matches && override.language !== undefined      ? override.language      : parsed.language,
-      dateRangeDays: matches && override.dateRangeDays !== undefined ? override.dateRangeDays : parsed.dateRangeDays,
-    };
-  }, [parsed, override]);
-
-  type OverrideKey = "platform" | "intent" | "term" | "maxResults" | "country" | "language" | "dateRangeDays";
-  const setOverrideField = (k: OverrideKey, v: string | number | null) => {
-    if (!parsed) return;
-    setOverride((prev) => {
-      const base = prev && prev.rawText === parsed.rawText ? prev : { rawText: parsed.rawText };
-      return { ...base, [k]: v };
+  const mergedPlans: SearchPlan[] = useMemo(() => {
+    if (!strategy) return [];
+    return strategy.plans.map((p) => {
+      const o = overrides[p.id];
+      if (!o) return p;
+      return {
+        ...p,
+        platform:      o.platform      ?? p.platform,
+        keyword:       o.keyword       ?? p.keyword,
+        maxResults:    o.maxResults    ?? p.maxResults,
+        country:       o.country       ?? p.country,
+        language:      o.language      !== undefined ? o.language      : p.language,
+        dateRangeDays: o.dateRangeDays !== undefined ? o.dateRangeDays : p.dateRangeDays,
+      };
     });
+  }, [strategy, overrides]);
+
+  const setPlanField = <K extends keyof PlanOverride>(planId: string, key: K, value: PlanOverride[K]) => {
+    setOverrides((prev) => ({ ...prev, [planId]: { ...(prev[planId] ?? {}), [key]: value } }));
   };
 
-  const lowConfidence =
-    !!finalPlan && finalPlan.confidence < CONFIDENCE_CONFIRM_THRESHOLD;
+  const isSelected = (planId: string) => !unselected[planId];
+  const selectedPlans = mergedPlans.filter((p) => isSelected(p.id) && p.keyword.trim());
+  const lowConfidence = !!strategy && strategy.confidence < CONFIDENCE_CONFIRM_THRESHOLD;
   const needsConfirm = lowConfidence && !confirmed;
-  const ambiguous = (k: AmbiguousField) =>
-    !!finalPlan && finalPlan.ambiguousFields.includes(k);
 
   const onRun = async () => {
-    if (!finalPlan) return;
+    if (!strategy) return;
     if (!activeDb) {
       setError("No active database. Open Databases and pick one before scraping.");
       return;
     }
-    if (!finalPlan.term.trim()) {
-      setError("Search term is empty. Edit the term or rephrase the query.");
+    if (selectedPlans.length === 0) {
+      setError("No plans selected. Tick at least one plan before running.");
       return;
     }
     setRunning(true);
     setError(null);
     try {
-      const launched = await runScrapeWithPlan({
-        plan: finalPlan,
-        databaseId:   activeDb.id,
-        databaseName: activeDb.name,
+      // Fan out: launch every ticked plan in parallel. Settle on all
+      // results so a single failure doesn't strand the others.
+      const results = await Promise.allSettled(
+        selectedPlans.map((plan) =>
+          runScrapeWithSearchPlan({
+            plan,
+            databaseId:   activeDb.id,
+            databaseName: activeDb.name,
+          }),
+        ),
+      );
+      const launched: ActiveScrape[] = [];
+      const failures: string[] = [];
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") launched.push(r.value);
+        else failures.push(`${selectedPlans[i].platform} "${selectedPlans[i].keyword}": ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
       });
-      onLaunched(launched);
+      if (launched.length === 0) {
+        setError(`All ${selectedPlans.length} plans failed to start:\n${failures.join("\n")}`);
+      } else {
+        if (failures.length > 0) {
+          setError(`${launched.length} of ${selectedPlans.length} plans started. Failures:\n${failures.join("\n")}`);
+        }
+        onLaunched(launched);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start scrape.");
     } finally {
@@ -304,7 +318,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <div style={{ fontSize: 11, fontWeight: 500, color: T.text2, marginBottom: 8 }}>
-          Describe your scrape — platform, handle, or keywords. Plain English.
+          Describe what ads you want. The AI builds a search strategy — you pick which plans to run.
         </div>
         <div style={{ display: "flex", alignItems: "stretch", border: `1.5px solid ${T.accent}`, borderRadius: 12, background: T.bg2, padding: 10, gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg, #6C3FB5, ${T.accent})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -316,11 +330,9 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
             value={text}
             onChange={(e) => {
               setText(e.target.value);
-              // Clear the low-confidence ack as soon as the user edits the
-              // input — every new plan needs its own explicit confirm.
               if (confirmed) setConfirmed(false);
             }}
-            placeholder='e.g. "weight loss before and after on tiktok" or "@gymshark on instagram" or "100 facebook ads from athleanx"'
+            placeholder='e.g. "weight loss before and after for women over 40" or "@gymshark on instagram" or "ozempic ads from women influencers"'
             rows={2}
             style={{ flex: 1, border: "none", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: 13, color: T.text, background: "transparent", padding: 4 }}
           />
@@ -340,8 +352,7 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
         </div>
       </div>
 
-      {/* Parser preview / confirmation card */}
-      {finalPlan && (
+      {strategy && (
         <div style={{
           border: `1px solid ${lowConfidence ? T.red : T.accent}40`,
           background: lowConfidence ? T.rl : T.al,
@@ -349,141 +360,45 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 500, color: lowConfidence ? T.rd : T.ad }}>
-              We&apos;ll scrape — review before running
+              Search strategy — pick which plans to run
             </span>
-            {parsing && (
-              <span style={{ fontSize: 10, color: T.text2, marginLeft: 8 }}>refining parse…</span>
+            {strategising && (
+              <span style={{ fontSize: 10, color: T.text2, marginLeft: 8 }}>refining strategy…</span>
             )}
-            <ConfidenceChip value={finalPlan.confidence} />
+            <ConfidenceChip value={strategy.confidence} />
             <span style={{ fontSize: 10, color: T.text2 }}>
-              parsed via {finalPlan.source === "llm" ? "AI" : "rule-based fallback"}
+              {strategy.source === "llm" ? "AI strategist" : "rule-based fallback"} · {strategy.plans.length} plan{strategy.plans.length === 1 ? "" : "s"}
             </span>
           </div>
 
-          {/* Reasoning */}
           <div style={{ fontSize: 11, color: T.text, marginBottom: 10, lineHeight: 1.4 }}>
-            {finalPlan.reasoning}
+            {strategy.reasoning}
           </div>
 
-          {/* Warnings */}
-          {finalPlan.warnings.length > 0 && (
+          {strategy.warnings.length > 0 && (
             <div style={{
               padding: "8px 10px", marginBottom: 10, borderRadius: 6,
               background: T.ambl, color: "#854F0B", fontSize: 11, lineHeight: 1.5,
             }}>
-              {finalPlan.warnings.map((w, i) => (
+              {strategy.warnings.map((w, i) => (
                 <div key={i} style={{ marginTop: i === 0 ? 0 : 6 }}>⚠ {w}</div>
               ))}
             </div>
           )}
 
-          {/* Editable parsed fields — every extracted field is editable inline. */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 12 }}>
-            <EditableRow label="Platform" warn={ambiguous("platform")}>
-              <select
-                value={finalPlan.platform}
-                onChange={(e) => setOverrideField("platform", e.target.value as SupportedPlatform)}
-                style={editableInputStyle(ambiguous("platform"))}
-              >
-                {(["TikTok", "Instagram", "Meta", "YouTube"] as const).map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </EditableRow>
-            <EditableRow label="Intent" warn={ambiguous("intent")}>
-              <select
-                value={finalPlan.intent}
-                onChange={(e) => setOverrideField("intent", e.target.value as QueryIntent)}
-                style={editableInputStyle(ambiguous("intent"))}
-              >
-                {(["handle", "keyword", "category", "competitor_url"] as const).map((i) => (
-                  <option key={i} value={i}>{intentLabel(i)}</option>
-                ))}
-              </select>
-            </EditableRow>
-            <EditableRow label={intentLabel(finalPlan.intent)} warn={ambiguous("term")}>
-              <input
-                type="text"
-                value={finalPlan.term}
-                onChange={(e) => setOverrideField("term", e.target.value)}
-                style={editableInputStyle(ambiguous("term"))}
+          {/* Plan rows — each is one BD trigger. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+            {mergedPlans.map((plan) => (
+              <PlanRow
+                key={plan.id}
+                plan={plan}
+                selected={isSelected(plan.id)}
+                onToggle={(v) => setUnselected((s) => ({ ...s, [plan.id]: !v }))}
+                onField={(k, v) => setPlanField(plan.id, k, v)}
               />
-            </EditableRow>
-            <EditableRow label="Max ads">
-              <input
-                type="number" min={10} max={500} step={10}
-                value={finalPlan.maxResults}
-                onChange={(e) => {
-                  const n = Math.max(10, Math.min(500, Number(e.target.value) || 100));
-                  setOverrideField("maxResults", n);
-                }}
-                style={editableInputStyle(false)}
-              />
-            </EditableRow>
-            <EditableRow label="Country" warn={ambiguous("country")}>
-              <input
-                type="text"
-                value={finalPlan.country}
-                maxLength={2}
-                onChange={(e) => {
-                  const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
-                  setOverrideField("country", v || "US");
-                }}
-                style={editableInputStyle(ambiguous("country"))}
-                placeholder="US"
-              />
-            </EditableRow>
-            <EditableRow label="Language" warn={ambiguous("language")}>
-              <select
-                value={finalPlan.language ?? ""}
-                onChange={(e) => setOverrideField("language", e.target.value || null)}
-                style={editableInputStyle(ambiguous("language"))}
-              >
-                <option value="">Any</option>
-                <option value="en">English (en)</option>
-                <option value="es">Spanish (es)</option>
-                <option value="fr">French (fr)</option>
-                <option value="de">German (de)</option>
-              </select>
-            </EditableRow>
-            <EditableRow label="Date range (days)" warn={ambiguous("dateRangeDays")}>
-              <input
-                type="number" min={1} max={365}
-                value={finalPlan.dateRangeDays ?? ""}
-                placeholder="any"
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (!raw) { setOverrideField("dateRangeDays", null); return; }
-                  const n = Math.max(1, Math.min(365, Number(raw) || 0));
-                  setOverrideField("dateRangeDays", n || null);
-                }}
-                style={editableInputStyle(ambiguous("dateRangeDays"))}
-              />
-            </EditableRow>
+            ))}
           </div>
 
-          {finalPlan.alsoConsider.length > 0 && (
-            <div style={{ fontSize: 11, color: T.text2, marginBottom: 10 }}>
-              <span style={{ marginRight: 6 }}>Also try:</span>
-              {finalPlan.alsoConsider.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setOverrideField("platform", p)}
-                  style={{
-                    padding: "2px 8px", marginRight: 4, borderRadius: 999,
-                    background: T.bg2, border: `1px solid ${T.border2}`,
-                    color: T.text, fontSize: 11, cursor: "pointer", fontFamily: "inherit",
-                  }}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Low-confidence confirm gate. The user must check the box before
-             the Run button activates so a bad auto-parse never launches
-             a scrape silently. */}
           {lowConfidence && (
             <label style={{
               display: "flex", alignItems: "flex-start", gap: 8,
@@ -497,18 +412,17 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
                 style={{ marginTop: 2 }}
               />
               <span>
-                <strong>Low confidence parse.</strong> The fields marked red above were guessed.
-                Review them, edit if wrong, then tick this box to confirm.
+                <strong>Low confidence strategy.</strong> Review the plans above, edit or untick any that look wrong, then tick this box to confirm.
               </span>
             </label>
           )}
 
-          {parseError && (
+          {strategyError && (
             <div style={{
               padding: "8px 10px", marginBottom: 8, borderRadius: 6,
               background: T.rl, color: T.rd, fontSize: 11,
             }}>
-              Parse refinement failed: {parseError}. Using fallback parse above — review carefully.
+              Strategy refinement failed: {strategyError}. Using fallback strategy above — review carefully.
             </div>
           )}
 
@@ -523,15 +437,18 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={onRun}
-              disabled={running || !finalPlan.term.trim() || !activeDb || needsConfirm}
-              style={btnStyle({ primary: true, disabled: running || !finalPlan.term.trim() || !activeDb || needsConfirm })}
+              disabled={running || selectedPlans.length === 0 || !activeDb || needsConfirm}
+              style={btnStyle({ primary: true, disabled: running || selectedPlans.length === 0 || !activeDb || needsConfirm })}
               title={needsConfirm ? "Tick the confirm box above to enable" : undefined}
             >
-              {running ? "Starting…" : needsConfirm ? "Confirm to run" : `Run ${finalPlan.platform} scrape`}
+              {running ? "Starting…"
+                : needsConfirm ? "Confirm to run"
+                : selectedPlans.length === 0 ? "Pick at least one plan"
+                : `Run ${selectedPlans.length} plan${selectedPlans.length === 1 ? "" : "s"}`}
             </button>
             <button onClick={onSwitchToRegular} style={btnStyle({})}>Edit in regular mode</button>
             <span style={{ fontSize: 11, color: T.text2, marginLeft: "auto" }}>
-              {finalPlan.source === "llm" ? "AI-parsed" : "Rule-based parse"} · edit any field above
+              {strategy.source === "llm" ? "AI strategist" : "Fallback"} · edit any field above
             </span>
           </div>
         </div>
@@ -540,22 +457,87 @@ function FastMode({ onSwitchToRegular, onLaunched }: { onSwitchToRegular: () => 
   );
 }
 
-function EditableRow({ label, warn, children }: { label: string; warn?: boolean; children: React.ReactNode }) {
+function PlanRow({
+  plan, selected, onToggle, onField,
+}: {
+  plan: SearchPlan;
+  selected: boolean;
+  onToggle: (v: boolean) => void;
+  onField: <K extends keyof PlanOverride>(k: K, v: PlanOverride[K]) => void;
+}) {
   return (
     <div style={{
-      background: T.bg2, padding: "6px 10px", borderRadius: 6,
-      border: `1px solid ${warn ? T.red : T.border}`,
-      boxShadow: warn ? `0 0 0 2px ${T.red}1a` : undefined,
+      display: "grid",
+      gridTemplateColumns: "auto 110px 1fr 80px 70px 80px",
+      gap: 8, alignItems: "center",
+      padding: "10px 12px", borderRadius: 8,
+      background: T.bg2,
+      border: `1px solid ${selected ? T.accent : T.border}`,
+      boxShadow: selected ? `0 0 0 2px ${T.accent}12` : undefined,
+      opacity: selected ? 1 : 0.55,
     }}>
-      <div style={{
-        fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
-        color: warn ? T.rd : T.text2, marginBottom: 4,
-        display: "flex", alignItems: "center", gap: 4,
-      }}>
-        {label}
-        {warn && <span title="The parser was unsure about this field — review or edit before running.">⚠</span>}
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={(e) => onToggle(e.target.checked)}
+        style={{ width: 14, height: 14, cursor: "pointer" }}
+      />
+      <select
+        value={plan.platform}
+        onChange={(e) => onField("platform", e.target.value as SupportedPlatform)}
+        style={editableInputStyle(false)}
+      >
+        {(["TikTok", "Instagram", "Meta", "YouTube"] as const).map((p) => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <input
+          type="text"
+          value={plan.keyword}
+          onChange={(e) => onField("keyword", e.target.value)}
+          style={editableInputStyle(false)}
+          placeholder="search term"
+        />
+        <div style={{ fontSize: 10, color: T.text2, lineHeight: 1.35 }}>
+          {plan.reason}
+        </div>
       </div>
-      {children}
+      <input
+        type="number" min={10} max={500} step={10}
+        value={plan.maxResults}
+        onChange={(e) => {
+          const n = Math.max(10, Math.min(500, Number(e.target.value) || 100));
+          onField("maxResults", n);
+        }}
+        style={editableInputStyle(false)}
+        title="Max ads"
+      />
+      <input
+        type="text"
+        value={plan.country}
+        maxLength={2}
+        onChange={(e) => {
+          const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+          onField("country", v || "US");
+        }}
+        style={editableInputStyle(false)}
+        placeholder="US"
+        title="Country"
+      />
+      <input
+        type="number" min={1} max={365}
+        value={plan.dateRangeDays ?? ""}
+        placeholder="any"
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (!raw) { onField("dateRangeDays", null); return; }
+          const n = Math.max(1, Math.min(365, Number(raw) || 0));
+          onField("dateRangeDays", n || null);
+        }}
+        style={editableInputStyle(false)}
+        title="Date range (days)"
+      />
     </div>
   );
 }
@@ -580,20 +562,11 @@ function ConfidenceChip({ value }: { value: number }) {
       marginLeft: "auto", fontSize: 10, padding: "2px 7px",
       borderRadius: 999, background: bg, color: fg, fontWeight: 500,
       display: "inline-flex", alignItems: "center", gap: 4,
-    }} title={`Parser confidence: ${pct}%`}>
+    }} title={`Strategy confidence: ${pct}%`}>
       <span style={{ width: 5, height: 5, borderRadius: "50%", background: fg }} />
       {pct}% confidence
     </span>
   );
-}
-
-function intentLabel(intent: QueryIntent): string {
-  switch (intent) {
-    case "handle":         return "Handle";
-    case "keyword":        return "Keyword";
-    case "category":       return "Category";
-    case "competitor_url": return "URL";
-  }
 }
 
 function InfRow({ label, value }: { label: string; value: string }) {
@@ -601,16 +574,6 @@ function InfRow({ label, value }: { label: string; value: string }) {
     <div style={{ background: T.bg2, padding: "6px 10px", borderRadius: 6, border: `1px solid ${T.border}` }}>
       <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T.text2 }}>{label}</div>
       <div style={{ fontSize: 12, color: T.text, marginTop: 1 }}>{value}</div>
-    </div>
-  );
-}
-
-function BreakdownCell({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "good" | "warn" | "neutral" }) {
-  const color = tone === "good" ? T.gd : tone === "warn" ? "#633806" : T.text;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T.text2 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 600, color, lineHeight: 1.1 }}>{value.toLocaleString()}</div>
     </div>
   );
 }
@@ -1264,18 +1227,18 @@ async function runScrape({
   });
 }
 
-async function runScrapeWithPlan({
+async function runScrapeWithSearchPlan({
   plan, databaseId, databaseName,
 }: {
-  plan:         ParsedQuery;
+  plan:         SearchPlan;
   databaseId:   string;
   databaseName: string;
 }): Promise<ActiveScrape> {
   if (!databaseId) {
     throw new Error("No active database selected. Pick one in Databases before scraping.");
   }
-  const keyword = termForBrightData(plan);
-  if (!keyword) throw new Error("Parsed search term is empty.");
+  const keyword = keywordForBrightData(plan);
+  if (!keyword) throw new Error("Plan keyword is empty.");
   return dispatchScrape({
     platform:     plan.platform,
     keyword,
@@ -1283,7 +1246,7 @@ async function runScrapeWithPlan({
     databaseId,
     databaseName,
     country:      plan.country,
-    intent:       plan.intent === "category" ? "keyword" : plan.intent,
+    intent:       plan.intent,
   });
 }
 
@@ -1330,41 +1293,118 @@ async function dispatchScrape({
   };
 }
 
-// ── SCRAPE PROGRESS PANEL ─────────────────────────────────────
-// Renders inline while a Bright Data snapshot is running. Polls /api/discover
-// every 2s so the user immediately sees the job is alive — addresses NWLA-27.
-function ScrapeProgressPanel({
-  scrape, onDismiss, onViewHistory,
-}: { scrape: ActiveScrape; onDismiss: () => void; onViewHistory: () => void }) {
-  type ProgressState = {
-    status:    string;
-    finished:  boolean;
-    succeeded?: boolean;
-    error?:    string;
-    stats?:    { records?: number; errors?: number; cost?: number };
-    itemCount?: number;
-    persisted?: { imported: number; deduped: number; skipped: number; failed: number };
-  };
-  const [state, setState] = useState<ProgressState>({ status: "starting", finished: false });
+// ── MULTI-SCRAPE PROGRESS PANEL ───────────────────────────────
+// Used for both Fast mode (N parallel BD triggers, one per ticked plan) and
+// Regular mode (1 trigger). The N=1 case is the same component — keeps a
+// single rendering path and avoids drifting between the two modes.
+
+type ScrapeProgressState = {
+  status:    string;
+  finished:  boolean;
+  succeeded?: boolean;
+  error?:    string;
+  stats?:    { records?: number; errors?: number; cost?: number };
+  itemCount?: number;
+  persisted?: { imported: number; deduped: number; skipped: number; failed: number };
+};
+
+function MultiScrapeProgressPanel({
+  scrapes, onDismiss, onViewHistory,
+}: {
+  scrapes: ActiveScrape[];
+  onDismiss: () => void;
+  onViewHistory: () => void;
+}) {
+  const [states, setStates] = useState<Record<string, ScrapeProgressState>>(() => {
+    const init: Record<string, ScrapeProgressState> = {};
+    for (const s of scrapes) init[s.scrapeRunId] = { status: "starting", finished: false };
+    return init;
+  });
+
+  const allFinished = scrapes.every((s) => states[s.scrapeRunId]?.finished);
+  const succeededCount = scrapes.filter((s) => states[s.scrapeRunId]?.succeeded).length;
+  const totalImported = scrapes.reduce(
+    (n, s) => n + (states[s.scrapeRunId]?.persisted?.imported ?? 0), 0,
+  );
+  const totalRecords = scrapes.reduce(
+    (n, s) => n + (states[s.scrapeRunId]?.stats?.records ?? 0), 0,
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Aggregate header */}
+      <div className="card" style={{
+        ...cardStyle(),
+        borderColor: allFinished ? (succeededCount === scrapes.length ? T.green : T.red) : T.accent,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>
+            {allFinished
+              ? `${succeededCount} of ${scrapes.length} plan${scrapes.length === 1 ? "" : "s"} succeeded · ${totalImported} ad${totalImported === 1 ? "" : "s"} saved`
+              : `Running ${scrapes.length} plan${scrapes.length === 1 ? "" : "s"} · ${totalRecords} ad${totalRecords === 1 ? "" : "s"} collected so far`}
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {allFinished && totalImported > 0 && (
+              <a href="/library" style={{ ...btnStyle({ primary: true }), textDecoration: "none" }}>
+                Open in Library ({totalImported})
+              </a>
+            )}
+            {allFinished && <button onClick={onViewHistory} style={btnStyle({})}>View in Job history</button>}
+            <button onClick={onDismiss} style={btnStyle({})}>
+              {allFinished ? "Run another scrape" : "Hide panel"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-plan rows */}
+      {scrapes.map((s) => (
+        <ScrapeProgressRow
+          key={s.scrapeRunId}
+          scrape={s}
+          onStateChange={(state) => setStates((prev) => ({ ...prev, [s.scrapeRunId]: state }))}
+        />
+      ))}
+
+      <style jsx global>{`
+        @keyframes scrapeIndeterminate {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes scrapePulse {
+          0%   { box-shadow: 0 0 0 0 ${T.amber}66; }
+          70%  { box-shadow: 0 0 0 8px ${T.amber}00; }
+          100% { box-shadow: 0 0 0 0 ${T.amber}00; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ScrapeProgressRow({
+  scrape, onStateChange,
+}: {
+  scrape: ActiveScrape;
+  onStateChange: (s: ScrapeProgressState) => void;
+}) {
+  const [state, setState] = useState<ScrapeProgressState>({ status: "starting", finished: false });
   const [elapsed, setElapsed] = useState(0);
   const [stopped, setStopped] = useState(false);
 
-  // Tick elapsed time once per second.
   useEffect(() => {
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - scrape.startedAt) / 1000)), 1000);
     return () => clearInterval(id);
   }, [scrape.startedAt]);
 
-  // Poll BD progress every 2s until terminal (or user stops).
   useEffect(() => {
     if (stopped || state.finished) return;
     let cancelled = false;
     const poll = async () => {
       try {
         const res = await fetch(`/api/discover?runId=${encodeURIComponent(scrape.runId)}&scrapeRunId=${encodeURIComponent(scrape.scrapeRunId)}&databaseId=${encodeURIComponent(scrape.databaseId)}`);
-        const data = await res.json() as ProgressState & { items?: unknown[] };
+        const data = await res.json() as ScrapeProgressState & { items?: unknown[] };
         if (cancelled) return;
-        setState({
+        const next: ScrapeProgressState = {
           status:    data.status ?? "unknown",
           finished:  Boolean(data.finished),
           succeeded: data.succeeded,
@@ -1372,15 +1412,22 @@ function ScrapeProgressPanel({
           stats:     data.stats,
           itemCount: data.itemCount ?? (Array.isArray(data.items) ? data.items.length : undefined),
           persisted: data.persisted,
-        });
+        };
+        setState(next);
+        onStateChange(next);
       } catch (e) {
         if (cancelled) return;
-        setState((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Polling failed" }));
+        setState((prev) => {
+          const next = { ...prev, error: e instanceof Error ? e.message : "Polling failed" };
+          onStateChange(next);
+          return next;
+        });
       }
     };
     poll();
     const id = setInterval(poll, 2000);
     return () => { cancelled = true; clearInterval(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrape.runId, scrape.scrapeRunId, scrape.databaseId, stopped, state.finished]);
 
   const records = state.stats?.records ?? 0;
@@ -1397,138 +1444,83 @@ function ScrapeProgressPanel({
   const headline = isError
     ? `Scrape ${state.status} — see error below`
     : isDone
-      ? `Scrape complete — ${importedCount} ad${importedCount === 1 ? "" : "s"} saved to ${scrape.databaseName}`
+      ? `Complete — ${importedCount} ad${importedCount === 1 ? "" : "s"} saved`
       : stopped
         ? "Polling stopped (scrape still runs on Bright Data)"
         : "Scraping…";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div className="card" style={{ ...cardStyle(), borderColor: isError ? T.red : isDone ? T.green : T.accent }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <span style={{
-            width: 10, height: 10, borderRadius: "50%", background: dotColor,
-            boxShadow: isRun ? `0 0 0 0 ${dotColor}` : undefined,
-            animation: isRun ? "scrapePulse 1.4s ease-in-out infinite" : undefined,
-          }} />
-          <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>{headline}</div>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: T.text2, fontFamily: "var(--font-mono)" }}>
-            {formatElapsed(elapsed)}
-          </span>
+    <div className="card" style={{ ...cardStyle(), borderColor: isError ? T.red : isDone ? T.green : T.accent }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <span style={{
+          width: 10, height: 10, borderRadius: "50%", background: dotColor,
+          animation: isRun ? "scrapePulse 1.4s ease-in-out infinite" : undefined,
+        }} />
+        <div style={{ fontSize: 12, fontWeight: 500, color: T.text }}>
+          <span style={{ color: T.text2 }}>{scrape.platform}</span> · {scrape.keyword || "—"}
         </div>
-
-        {/* Progress bar */}
-        <div style={{ position: "relative", height: 8, borderRadius: 4, background: T.bg3, overflow: "hidden", marginBottom: 10 }}>
-          {records > 0 || isDone ? (
-            <div style={{
-              position: "absolute", inset: 0, width: `${pct}%`,
-              background: isError ? T.red : isDone ? T.green : T.accent,
-              transition: "width 400ms ease",
-            }} />
-          ) : isRun ? (
-            <div style={{
-              position: "absolute", inset: 0,
-              background: `linear-gradient(90deg, transparent 0%, ${T.accent}80 50%, transparent 100%)`,
-              animation: "scrapeIndeterminate 1.6s linear infinite",
-            }} />
-          ) : null}
-        </div>
-
-        {/* Counters — at-a-glance */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: 10 }}>
-          <InfRow label="Platform" value={scrape.platform} />
-          <InfRow label="Keyword" value={scrape.keyword || "—"} />
-          <InfRow label="Database" value={scrape.databaseName} />
-          <InfRow
-            label={isDone ? "Saved" : "Collected"}
-            value={
-              isDone && state.persisted
-                ? `${state.persisted.imported} / ${state.stats?.records ?? records}`
-                : `${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`
-            }
-          />
-          <InfRow label="Status" value={state.status} />
-        </div>
-
-        {/* Persisted breakdown — full outcome accounting so success is never silent */}
-        {isDone && state.persisted && (
-          <div style={{
-            display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8,
-            fontSize: 11, marginBottom: 10,
-            padding: "10px 12px", background: T.bg3, borderRadius: 8,
-          }}>
-            <BreakdownCell label="Scraped"  value={state.stats?.records ?? records} />
-            <BreakdownCell label="Inserted" value={state.persisted.imported} tone={state.persisted.imported > 0 ? "good" : "warn"} />
-            <BreakdownCell label="Deduped"  value={state.persisted.deduped} />
-            <BreakdownCell label="Dropped"  value={state.persisted.skipped + state.persisted.failed} tone={(state.persisted.skipped + state.persisted.failed) > 0 ? "warn" : "neutral"} />
-          </div>
-        )}
-
-        {/* Zero-import warning — explains why a "successful" scrape produced nothing visible */}
-        {isDone && state.persisted && state.persisted.imported === 0 && (state.stats?.records ?? records) > 0 && (
-          <div style={{
-            padding: "8px 10px", marginBottom: 10, borderRadius: 6,
-            background: T.ambl, color: "#633806", fontSize: 11,
-          }}>
-            <strong>Scrape returned {state.stats?.records ?? records} row{(state.stats?.records ?? records) === 1 ? "" : "s"} but nothing landed in {scrape.databaseName}:</strong>{" "}
-            {state.persisted.deduped > 0 && <>{state.persisted.deduped} matched existing URLs (deduped). </>}
-            {state.persisted.failed > 0 && <>{state.persisted.failed} failed normalization or insert. </>}
-            {state.persisted.skipped > 0 && <>{state.persisted.skipped} were skipped (missing required fields). </>}
-            Switch active DB or try a different keyword.
-          </div>
-        )}
-
-        {/* Errors */}
-        {state.error && (
-          <div style={{
-            padding: "8px 10px", marginBottom: 10, borderRadius: 6,
-            background: T.rl, color: T.rd, fontSize: 11, fontFamily: "var(--font-mono)",
-            whiteSpace: "pre-wrap", wordBreak: "break-word",
-          }}>{state.error}</div>
-        )}
-
-        {/* Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isRun && !stopped && (
-            <button onClick={() => setStopped(true)} style={btnStyle({})}>Stop polling</button>
-          )}
-          {isDone && state.persisted && state.persisted.imported > 0 && (
-            <a href="/library" style={{ ...btnStyle({ primary: true }), textDecoration: "none" }}>
-              Open in Library ({state.persisted.imported})
-            </a>
-          )}
-          {(isDone || isError || stopped) && (
-            <button onClick={onViewHistory} style={btnStyle({})}>View in Job history</button>
-          )}
-          <button onClick={onDismiss} style={btnStyle({})}>
-            {isDone || isError ? "Run another scrape" : "Hide panel"}
-          </button>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: T.text2 }}>
-            {isRun
-              ? "Polling Bright Data every 2 seconds…"
-              : isDone
-                ? state.persisted && state.persisted.imported > 0
-                  ? `${state.persisted.imported} row${state.persisted.imported === 1 ? "" : "s"} persisted into ${scrape.databaseName}.`
-                  : `Run finished but nothing landed in ${scrape.databaseName} — see breakdown above.`
-                : isError
-                  ? "Run did not complete. Adjust keywords and try again."
-                  : "Polling paused. The Bright Data snapshot continues in the background."}
-          </span>
-        </div>
+        <div style={{ fontSize: 11, color: T.text2, marginLeft: 8 }}>{headline}</div>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: T.text2, fontFamily: "var(--font-mono)" }}>
+          {formatElapsed(elapsed)}
+        </span>
       </div>
 
-      <style jsx global>{`
-        @keyframes scrapeIndeterminate {
-          0%   { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        @keyframes scrapePulse {
-          0%   { box-shadow: 0 0 0 0 ${T.amber}66; }
-          70%  { box-shadow: 0 0 0 8px ${T.amber}00; }
-          100% { box-shadow: 0 0 0 0 ${T.amber}00; }
-        }
-      `}</style>
+      <div style={{ position: "relative", height: 6, borderRadius: 3, background: T.bg3, overflow: "hidden", marginBottom: 8 }}>
+        {records > 0 || isDone ? (
+          <div style={{
+            position: "absolute", inset: 0, width: `${pct}%`,
+            background: isError ? T.red : isDone ? T.green : T.accent,
+            transition: "width 400ms ease",
+          }} />
+        ) : isRun ? (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: `linear-gradient(90deg, transparent 0%, ${T.accent}80 50%, transparent 100%)`,
+            animation: "scrapeIndeterminate 1.6s linear infinite",
+          }} />
+        ) : null}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, fontSize: 11, marginBottom: isDone || isError || state.error ? 8 : 0 }}>
+        <InfRow label="Database" value={scrape.databaseName} />
+        <InfRow
+          label={isDone ? "Saved" : "Collected"}
+          value={
+            isDone && state.persisted
+              ? `${state.persisted.imported} / ${state.stats?.records ?? records}`
+              : `${(state.itemCount ?? records).toLocaleString()} / ${scrape.maxResults}`
+          }
+        />
+        <InfRow label="Status" value={state.status} />
+        <InfRow label="Deduped" value={String(state.persisted?.deduped ?? 0)} />
+        <InfRow label="Dropped" value={String((state.persisted?.skipped ?? 0) + (state.persisted?.failed ?? 0))} />
+      </div>
+
+      {isDone && state.persisted && state.persisted.imported === 0 && (state.stats?.records ?? records) > 0 && (
+        <div style={{
+          padding: "8px 10px", marginBottom: 8, borderRadius: 6,
+          background: T.ambl, color: "#633806", fontSize: 11,
+        }}>
+          <strong>Returned {state.stats?.records ?? records} row{(state.stats?.records ?? records) === 1 ? "" : "s"} but nothing landed:</strong>{" "}
+          {(state.persisted.deduped ?? 0) > 0 && <>{state.persisted.deduped} deduped. </>}
+          {(state.persisted.failed ?? 0) > 0 && <>{state.persisted.failed} failed. </>}
+          {(state.persisted.skipped ?? 0) > 0 && <>{state.persisted.skipped} skipped. </>}
+        </div>
+      )}
+
+      {state.error && (
+        <div style={{
+          padding: "8px 10px", borderRadius: 6,
+          background: T.rl, color: T.rd, fontSize: 11, fontFamily: "var(--font-mono)",
+          whiteSpace: "pre-wrap", wordBreak: "break-word",
+        }}>{state.error}</div>
+      )}
+
+      {isRun && !stopped && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <button onClick={() => setStopped(true)} style={btnStyle({ small: true })}>Stop polling</button>
+        </div>
+      )}
     </div>
   );
 }
